@@ -938,11 +938,14 @@ export default function App() {
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10, marginBottom: 20 }}>
             {[
-              { l: "售前咨询", c: "preSales", clr: "#60a5fa" }, { l: "售中任务", c: "midSales", clr: "#a78bfa" },
-              { l: "Key Project", c: "keyProject", clr: "#34d399" },
-              { l: "Ticket", c: "tickets", clr: "#fbbf24" }, { l: "质保维修", c: "warranty", clr: "#fb923c" }, { l: "付费维修", c: "paidRepair", clr: "#f87171" },
+              { l: "售前咨询", c: "preSales", clr: "#60a5fa", tab: "preSales" }, { l: "售中任务", c: "midSales", clr: "#a78bfa", tab: "midSales" },
+              { l: "Key Project", c: "keyProject", clr: "#34d399", tab: "keyProject" },
+              { l: "Ticket", c: "tickets", clr: "#fbbf24", tab: "afterSales", sub: "tickets" }, { l: "质保维修", c: "warranty", clr: "#fb923c", tab: "afterSales", sub: "warranty" }, { l: "付费维修", c: "paidRepair", clr: "#f87171", tab: "afterSales", sub: "paidRepair" },
             ].map(s => (
-              <div key={s.c} style={{ ...S.card, padding: "14px 18px" }}>
+              <div key={s.c} style={{ ...S.card, padding: "14px 18px", cursor: "pointer", transition: "all 0.15s", border: activeTab === s.tab && (!s.sub || activeSubTab === s.sub) ? `1px solid ${s.clr}44` : "1px solid #27272a" }}
+                onClick={() => { setActiveTab(s.tab); if (s.sub) setActiveSubTab(s.sub); }}
+                onMouseEnter={e => e.currentTarget.style.transform = "translateY(-2px)"}
+                onMouseLeave={e => e.currentTarget.style.transform = "translateY(0)"}>
                 <div style={{ fontSize: 10, color: "#71717a", fontWeight: 600, marginBottom: 3 }}>{s.l}</div>
                 <div style={{ fontSize: 22, fontWeight: 700, color: s.clr }}>{cnt(s.c)}</div>
                 <div style={{ fontSize: 10, color: "#52525b", marginTop: 1 }}>进行中 {cntOn(s.c)}{s.c === "tickets" ? ` · 平均 ${avgTime()}` : ""}</div>
