@@ -466,7 +466,7 @@ function TaskTable({ cat, columns, data, onUpdate, onDelete, onAdd, engineers, o
                       : c.key === "owners" ? <OwnerSelect value={editData.owners || []} engineers={engineers} onChange={v => setEditData({ ...editData, owners: v })} />
                       : c.key === "date" ? <input type="date" style={{ ...S.input, width: 130 }} value={editData.date || ""} onChange={e => setEditData({ ...editData, date: e.target.value })} />
                       : c.key === "timer" ? <span style={{ color: "#71717a", fontSize: 12 }}>自动</span>
-                      : fileFields.includes(c.key) ? <label style={{ ...S.btn, ...S.btnGhost, ...S.btnSm, cursor: "pointer" }}>{I.upload} PDF<input type="file" accept=".pdf" style={{ display: "none" }} onChange={e => { if (e.target.files[0]) setEditData({ ...editData, [c.key]: e.target.files[0].name }); }} /></label>
+                      : fileFields.includes(c.key) ? <label style={{ ...S.btn, ...S.btnGhost, ...S.btnSm, cursor: "pointer" }}>{I.upload} PDF<input type="file" accept=".pdf" style={{ display: "none" }} onChange={async e => { if (e.target.files[0]) { const f = e.target.files[0]; const fname = `${Date.now()}_${f.name}`; await supabase.storage.from("invoices").upload(fname, f); setEditData({ ...editData, [c.key]: fname }); } }} /></label>
                       : <input style={S.input} value={editData[c.key] || ""} onChange={e => setEditData({ ...editData, [c.key]: e.target.value })} />
                     ) : (
                       c.key === "status" ? (
@@ -486,7 +486,11 @@ function TaskTable({ cat, columns, data, onUpdate, onDelete, onAdd, engineers, o
                         row.status === "已解决" && row.resolved_at && row.created_at ? <span style={{ color: "#4ade80", fontFamily: "monospace", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 3 }}>{I.clock} {fmtDuration(new Date(row.resolved_at) - new Date(row.created_at))}</span>
                         : row.created_at ? <LiveTimer createdAt={row.created_at} /> : <span style={{ color: "#52525b" }}>-</span>
                       ) : fileFields.includes(c.key) ? (
-                        row[c.key] ? <span style={{ color: "#818cf8", fontSize: 12 }}>📄 {row[c.key]}</span> : <span style={{ color: "#52525b" }}>-</span>
+                        row[c.key] ? (
+                          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                            <a href={`${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/invoices/${row[c.key]}`} target="_blank" rel="noopener noreferrer" style={{ color: "#818cf8", fontSize: 12, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 3 }}>{I.download} {row[c.key].length > 25 ? row[c.key].slice(0, 22) + "..." : row[c.key]}</a>
+                          </div>
+                        ) : <span style={{ color: "#52525b" }}>-</span>
                       ) : (
                         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                           <span style={{ color: c.key === "date" ? "#a1a1aa" : "#e4e4e7" }}>{row[c.key] || "-"}</span>
@@ -539,7 +543,7 @@ function AddModal({ cat, columns, onSave, onClose, defaultOwners, engineers }) {
               {c.key === "status" ? <select style={S.input} value={data.status} onChange={e => setData({ ...data, status: e.target.value })}><option value="ongoing">Ongoing</option><option value="已解决">已解决</option></select>
               : c.key === "owners" ? <OwnerSelect value={data.owners || []} engineers={engineers} onChange={v => setData({ ...data, owners: v })} />
               : c.key === "date" ? <input type="date" style={S.input} value={data.date} onChange={e => setData({ ...data, date: e.target.value })} />
-              : fileFields.includes(c.key) ? <div><label style={{ ...S.btn, ...S.btnGhost, padding: "6px 12px", fontSize: 12, cursor: "pointer" }}>{I.upload} 上传PDF<input type="file" accept=".pdf" style={{ display: "none" }} onChange={e => { if (e.target.files[0]) setData({ ...data, [c.key]: e.target.files[0].name }); }} /></label>{data[c.key] && <span style={{ marginLeft: 8, fontSize: 12, color: "#818cf8" }}>{data[c.key]}</span>}</div>
+              : fileFields.includes(c.key) ? <div><label style={{ ...S.btn, ...S.btnGhost, padding: "6px 12px", fontSize: 12, cursor: "pointer" }}>{I.upload} 上传PDF<input type="file" accept=".pdf" style={{ display: "none" }} onChange={async e => { if (e.target.files[0]) { const f = e.target.files[0]; const fname = `${Date.now()}_${f.name}`; await supabase.storage.from("invoices").upload(fname, f); setData({ ...data, [c.key]: fname }); } }} /></label>{data[c.key] && <span style={{ marginLeft: 8, fontSize: 12, color: "#818cf8" }}>✓ {data[c.key].length > 20 ? data[c.key].slice(0, 17) + "..." : data[c.key]}</span>}</div>
               : c.key === "task_type" ? <select style={S.input} value={data.task_type || ""} onChange={e => setData({ ...data, task_type: e.target.value })}><option value="">选择类型...</option><option value="程序开发">程序开发</option><option value="仿真">仿真</option><option value="安装对接">安装对接</option><option value="培训">培训</option><option value="验收">验收</option><option value="其他">其他</option></select>
               : c.key === "craft" ? (
                 <div>
