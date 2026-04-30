@@ -49,7 +49,10 @@ const S = {
   btn: { background: "#2563eb", color: "#fff", border: "none", borderRadius: 7, padding: "7px 16px", fontSize: 13, cursor: "pointer", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 5 },
   btnGhost: { background: "transparent", border: "1px solid #3f3f46", color: "#a1a1aa" },
   btnSm: { padding: "4px 10px", fontSize: 12 },
-  tag: (ok) => ({ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: 16, fontSize: 11, fontWeight: 600, background: ok ? "#16a34a18" : "#eab30818", color: ok ? "#4ade80" : "#fbbf24", border: `1px solid ${ok ? "#16a34a33" : "#eab30833"}` }),
+  tag: (status) => ({ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: 16, fontSize: 11, fontWeight: 600,
+    background: status === "已解决" ? "#16a34a18" : status === "pending" ? "#f9731618" : "#eab30818",
+    color: status === "已解决" ? "#4ade80" : status === "pending" ? "#fb923c" : "#fbbf24",
+    border: `1px solid ${status === "已解决" ? "#16a34a33" : status === "pending" ? "#f9731633" : "#eab30833"}` }),
   th: { padding: "8px 10px", textAlign: "left", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#71717a", borderBottom: "1px solid #27272a", whiteSpace: "nowrap", cursor: "pointer", userSelect: "none" },
   td: { padding: "8px 10px", fontSize: 13, borderBottom: "1px solid #1e1e21", verticalAlign: "top" },
   sidebar: (on) => ({ padding: "8px 14px", borderRadius: 7, cursor: "pointer", background: on ? "#2563eb15" : "transparent", color: on ? "#60a5fa" : "#a1a1aa", fontWeight: on ? 600 : 400, fontSize: 13, marginBottom: 2, display: "flex", alignItems: "center", gap: 7 }),
@@ -410,7 +413,21 @@ function TaskTable({ cat, columns, data, onUpdate, onDelete, onAdd, engineers, o
   const [editData, setEditData] = useState({});
   const [deleteItem, setDeleteItem] = useState(null);
   const [searchText, setSearchText] = useState("");
+  const [inlineEdit, setInlineEdit] = useState(null); // { rowId, key }
+  const [inlineValue, setInlineValue] = useState("");
+  const inlineRef = useRef();
   const fileFields = cat === "paidRepair" ? ["invoice"] : [];
+
+  // Handle inline edit save
+  const saveInline = (row) => {
+    if (inlineEdit && inlineValue !== (row[inlineEdit.key] || "")) {
+      onUpdate({ ...row, [inlineEdit.key]: inlineValue });
+    }
+    setInlineEdit(null);
+  };
+
+  // Editable text fields (double-click to edit)
+  const editableFields = ["customer", "problem", "content", "note", "serial_no", "order_no", "sales", "quote", "project_desc", "requirement", "craft"];
 
   let sorted = [...data];
   const sf = sortState?.field, sd = sortState?.dir;
@@ -462,7 +479,7 @@ function TaskTable({ cat, columns, data, onUpdate, onDelete, onAdd, engineers, o
                 {columns.map(c => (
                   <td key={c.key} style={S.td}>
                     {editId === row.id ? (
-                      c.key === "status" ? <select style={{ ...S.input, width: 100 }} value={editData.status || "ongoing"} onChange={e => setEditData({ ...editData, status: e.target.value })}><option value="ongoing">Ongoing</option><option value="已解决">已解决</option></select>
+                      c.key === "status" ? <select style={{ ...S.input, width: 110 }} value={editData.status || "ongoing"} onChange={e => setEditData({ ...editData, status: e.target.value })}><option value="ongoing">Ongoing</option><option value="pending">Pending</option><option value="已解决">已解决</option></select>
                       : c.key === "owners" ? <OwnerSelect value={editData.owners || []} engineers={engineers} onChange={v => setEditData({ ...editData, owners: v })} />
                       : c.key === "date" ? <input type="date" style={{ ...S.input, width: 130 }} value={editData.date || ""} onChange={e => setEditData({ ...editData, date: e.target.value })} />
                       : c.key === "timer" ? <span style={{ color: "#71717a", fontSize: 12 }}>自动</span>
@@ -472,10 +489,11 @@ function TaskTable({ cat, columns, data, onUpdate, onDelete, onAdd, engineers, o
                       c.key === "status" ? (
                         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                           <div style={S.chk(row.status === "已解决")} onClick={() => {
-                            const ns = row.status === "已解决" ? "ongoing" : "已解决";
+                            const cycle = { "ongoing": "pending", "pending": "已解决", "已解决": "ongoing" };
+                            const ns = cycle[row.status] || "ongoing";
                             onUpdate({ ...row, status: ns, resolved_at: ns === "已解决" ? nowISO() : null });
                           }}>{row.status === "已解决" && <span style={{ color: "#fff" }}>{I.check}</span>}</div>
-                          <span style={S.tag(row.status === "已解决")}>{row.status === "已解决" ? "已解决" : "Ongoing"}</span>
+                          <span style={S.tag(row.status)}>{row.status === "已解决" ? "已解决" : row.status === "pending" ? "Pending" : "Ongoing"}</span>
                         </div>
                       ) : c.key === "owners" ? (
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
@@ -492,10 +510,19 @@ function TaskTable({ cat, columns, data, onUpdate, onDelete, onAdd, engineers, o
                           </div>
                         ) : <span style={{ color: "#52525b" }}>-</span>
                       ) : (
-                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                          <span style={{ color: c.key === "date" ? "#a1a1aa" : "#e4e4e7" }}>{row[c.key] || "-"}</span>
-                          {(c.key === "problem" || c.key === "content" || c.key === "note") && row[c.key] && <TranslateBtn text={row[c.key]} />}
-                        </div>
+                        editableFields.includes(c.key) && inlineEdit?.rowId === row.id && inlineEdit?.key === c.key ? (
+                          <input ref={inlineRef} style={{ ...S.input, fontSize: 13 }} value={inlineValue} autoFocus
+                            onChange={e => setInlineValue(e.target.value)}
+                            onBlur={() => saveInline(row)}
+                            onKeyDown={e => { if (e.key === "Enter") saveInline(row); if (e.key === "Escape") setInlineEdit(null); }} />
+                        ) : (
+                          <div style={{ display: "flex", alignItems: "center", gap: 4, cursor: editableFields.includes(c.key) ? "text" : "default", minHeight: 20, padding: "1px 2px", borderRadius: 4, transition: "background 0.1s" }}
+                            onDoubleClick={() => { if (editableFields.includes(c.key)) { setInlineEdit({ rowId: row.id, key: c.key }); setInlineValue(row[c.key] || ""); } }}
+                            title={editableFields.includes(c.key) ? "双击编辑" : ""}>
+                            <span style={{ color: c.key === "date" ? "#a1a1aa" : "#e4e4e7" }}>{row[c.key] || "-"}</span>
+                            {(c.key === "problem" || c.key === "content" || c.key === "note") && row[c.key] && <TranslateBtn text={row[c.key]} />}
+                          </div>
+                        )
                       )
                     )}
                   </td>
@@ -540,7 +567,7 @@ function AddModal({ cat, columns, onSave, onClose, defaultOwners, engineers }) {
           {columns.filter(c => c.key !== "timer").map(c => (
             <div key={c.key}>
               <label style={{ fontSize: 11, color: "#a1a1aa", marginBottom: 3, display: "block", fontWeight: 600 }}>{c.label}</label>
-              {c.key === "status" ? <select style={S.input} value={data.status} onChange={e => setData({ ...data, status: e.target.value })}><option value="ongoing">Ongoing</option><option value="已解决">已解决</option></select>
+              {c.key === "status" ? <select style={S.input} value={data.status} onChange={e => setData({ ...data, status: e.target.value })}><option value="ongoing">Ongoing</option><option value="pending">Pending</option><option value="已解决">已解决</option></select>
               : c.key === "owners" ? <OwnerSelect value={data.owners || []} engineers={engineers} onChange={v => setData({ ...data, owners: v })} />
               : c.key === "date" ? <input type="date" style={S.input} value={data.date} onChange={e => setData({ ...data, date: e.target.value })} />
               : fileFields.includes(c.key) ? <div><label style={{ ...S.btn, ...S.btnGhost, padding: "6px 12px", fontSize: 12, cursor: "pointer" }}>{I.upload} 上传PDF<input type="file" accept=".pdf" style={{ display: "none" }} onChange={async e => { if (e.target.files[0]) { const f = e.target.files[0]; const fname = `${Date.now()}_${f.name}`; await supabase.storage.from("invoices").upload(fname, f); setData({ ...data, [c.key]: fname }); } }} /></label>{data[c.key] && <span style={{ marginLeft: 8, fontSize: 12, color: "#818cf8" }}>✓ {data[c.key].length > 20 ? data[c.key].slice(0, 17) + "..." : data[c.key]}</span>}</div>
@@ -863,6 +890,118 @@ export default function App() {
   const viewLabel = selectedRegion ? `区域: ${selectedRegion}` : (curEng ? `工程师: ${curEng.name}` : "全部概览");
 
   const renderContent = () => {
+    if (activeTab === "dashboard") {
+      const catDefs = [
+        { key: "preSales", label: "售前咨询", clr: "#60a5fa" },
+        { key: "midSales", label: "售中任务", clr: "#a78bfa" },
+        { key: "keyProject", label: "Key Project", clr: "#34d399" },
+        { key: "tickets", label: "Ticket", clr: "#fbbf24" },
+        { key: "warranty", label: "质保维修", clr: "#fb923c" },
+        { key: "paidRepair", label: "付费维修", clr: "#f87171" },
+      ];
+      const statusCounts = catDefs.map(c => {
+        const d = getFiltered(c.key);
+        return { ...c, ongoing: d.filter(t => t.status === "ongoing").length, pending: d.filter(t => t.status === "pending").length, resolved: d.filter(t => t.status === "已解决").length, total: d.length };
+      });
+      const maxTotal = Math.max(...statusCounts.map(s => s.total), 1);
+
+      // Monthly trend (last 6 months)
+      const months = [];
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(); d.setMonth(d.getMonth() - i);
+        const key = d.toISOString().slice(0, 7);
+        const label = `${d.getMonth() + 1}月`;
+        months.push({ key, label });
+      }
+      const monthlyData = months.map(m => {
+        const all = tasks.filter(t => (t.date || "").startsWith(m.key));
+        return { ...m, created: all.length, resolved: all.filter(t => t.status === "已解决").length };
+      });
+      const maxMonthly = Math.max(...monthlyData.map(m => Math.max(m.created, m.resolved)), 1);
+
+      // Per engineer workload
+      const engLoad = engineers.map(e => {
+        const all = tasks.filter(t => (t.owners || []).includes(e.name));
+        return { name: e.name, total: all.length, ongoing: all.filter(t => t.status === "ongoing").length, pending: all.filter(t => t.status === "pending").length, resolved: all.filter(t => t.status === "已解决").length };
+      }).filter(e => e.total > 0).sort((a, b) => b.total - a.total);
+      const maxEng = Math.max(...engLoad.map(e => e.total), 1);
+
+      return (
+        <div>
+          {/* Status distribution by category */}
+          <div style={{ ...S.card, marginBottom: 20 }}>
+            <h3 style={{ margin: "0 0 16px 0", fontSize: 15, color: "#fff" }}>各类别状态分布</h3>
+            <div style={{ display: "grid", gap: 10 }}>
+              {statusCounts.map(s => (
+                <div key={s.key}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                    <span style={{ fontSize: 12, color: s.clr, fontWeight: 600 }}>{s.label}</span>
+                    <span style={{ fontSize: 11, color: "#71717a" }}>{s.total} 条</span>
+                  </div>
+                  <div style={{ display: "flex", height: 22, borderRadius: 6, overflow: "hidden", background: "#27272a" }}>
+                    {s.resolved > 0 && <div style={{ width: `${(s.resolved / maxTotal) * 100}%`, background: "#16a34a", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "#fff", fontWeight: 600, minWidth: s.resolved > 0 ? 28 : 0 }}>{s.resolved}</div>}
+                    {s.pending > 0 && <div style={{ width: `${(s.pending / maxTotal) * 100}%`, background: "#f97316", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "#fff", fontWeight: 600, minWidth: s.pending > 0 ? 28 : 0 }}>{s.pending}</div>}
+                    {s.ongoing > 0 && <div style={{ width: `${(s.ongoing / maxTotal) * 100}%`, background: s.clr, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "#fff", fontWeight: 600, minWidth: s.ongoing > 0 ? 28 : 0 }}>{s.ongoing}</div>}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 16, marginTop: 12, fontSize: 11 }}>
+              <span style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: "#16a34a", display: "inline-block" }} /> 已解决</span>
+              <span style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: "#f97316", display: "inline-block" }} /> Pending</span>
+              <span style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: "#60a5fa", display: "inline-block" }} /> Ongoing</span>
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+            {/* Monthly trend */}
+            <div style={S.card}>
+              <h3 style={{ margin: "0 0 16px 0", fontSize: 15, color: "#fff" }}>月度趋势（近6个月）</h3>
+              <div style={{ display: "flex", alignItems: "flex-end", gap: 8, height: 160 }}>
+                {monthlyData.map(m => (
+                  <div key={m.key} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                    <div style={{ display: "flex", gap: 3, alignItems: "flex-end", height: 130, width: "100%" }}>
+                      <div style={{ flex: 1, background: "#2563eb", borderRadius: "4px 4px 0 0", height: `${(m.created / maxMonthly) * 100}%`, minHeight: m.created > 0 ? 8 : 0, display: "flex", alignItems: "flex-start", justifyContent: "center" }}>
+                        {m.created > 0 && <span style={{ fontSize: 9, color: "#fff", fontWeight: 700, marginTop: 2 }}>{m.created}</span>}
+                      </div>
+                      <div style={{ flex: 1, background: "#16a34a", borderRadius: "4px 4px 0 0", height: `${(m.resolved / maxMonthly) * 100}%`, minHeight: m.resolved > 0 ? 8 : 0, display: "flex", alignItems: "flex-start", justifyContent: "center" }}>
+                        {m.resolved > 0 && <span style={{ fontSize: 9, color: "#fff", fontWeight: 700, marginTop: 2 }}>{m.resolved}</span>}
+                      </div>
+                    </div>
+                    <span style={{ fontSize: 10, color: "#71717a" }}>{m.label}</span>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: "flex", gap: 16, marginTop: 10, fontSize: 11 }}>
+                <span style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: "#2563eb", display: "inline-block" }} /> 新增</span>
+                <span style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: "#16a34a", display: "inline-block" }} /> 已解决</span>
+              </div>
+            </div>
+
+            {/* Engineer workload */}
+            <div style={S.card}>
+              <h3 style={{ margin: "0 0 16px 0", fontSize: 15, color: "#fff" }}>工程师工作量</h3>
+              <div style={{ display: "grid", gap: 8 }}>
+                {engLoad.map(e => (
+                  <div key={e.name}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                      <span style={{ fontSize: 12, color: "#e4e4e7", fontWeight: 600 }}>{e.name}</span>
+                      <span style={{ fontSize: 11, color: "#71717a" }}>{e.total} 条 (进行中 {e.ongoing + e.pending})</span>
+                    </div>
+                    <div style={{ display: "flex", height: 16, borderRadius: 4, overflow: "hidden", background: "#27272a" }}>
+                      {e.resolved > 0 && <div style={{ width: `${(e.resolved / maxEng) * 100}%`, background: "#16a34a" }} />}
+                      {e.pending > 0 && <div style={{ width: `${(e.pending / maxEng) * 100}%`, background: "#f97316" }} />}
+                      {e.ongoing > 0 && <div style={{ width: `${(e.ongoing / maxEng) * 100}%`, background: "#2563eb" }} />}
+                    </div>
+                  </div>
+                ))}
+                {engLoad.length === 0 && <div style={{ color: "#52525b", textAlign: "center", padding: 20 }}>暂无数据</div>}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
     if (activeTab === "afterSales") {
       const sub = { tickets: "Ticket", warranty: "质保内维修", paidRepair: "付费维修及易损件" };
       return (
@@ -958,6 +1097,7 @@ export default function App() {
               <button style={S.tab(activeTab === "midSales")} onClick={() => setActiveTab("midSales")}>售中</button>
               <button style={S.tab(activeTab === "afterSales")} onClick={() => setActiveTab("afterSales")}>售后</button>
               <button style={S.tab(activeTab === "keyProject")} onClick={() => setActiveTab("keyProject")}>Key Project</button>
+              <button style={{ ...S.tab(activeTab === "dashboard"), background: activeTab === "dashboard" ? "#059669" : "transparent" }} onClick={() => setActiveTab("dashboard")}>📊 Dashboard</button>
             </div>
             <button style={{ ...S.btn, background: "#7c3aed" }} onClick={() => setShowExport(true)}>{I.exportAll} 一键导出周报</button>
             <button style={{ ...S.btn, ...S.btnGhost, marginLeft: "auto" }} onClick={() => setShowTheme(true)}>{I.palette} 显示设置</button>
