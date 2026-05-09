@@ -4,6 +4,8 @@ import { supabase } from "./supabase.js";
 const ADMIN_PASSWORD = "10105zheweijunjie";
 const todayStr = () => new Date().toISOString().split("T")[0];
 const nowISO = () => new Date().toISOString();
+const todayNotePrefix = () => { const d = new Date(); return `${d.getMonth() + 1}.${d.getDate()}`; };
+const getDatesInRange = (s, e) => { const dates = []; const cur = new Date(s); const last = new Date(e); while (cur <= last) { dates.push(cur.toISOString().split("T")[0]); cur.setDate(cur.getDate() + 1); } return dates; };
 
 const fmtDuration = (ms) => {
   if (!ms || ms <= 0) return "-";
@@ -407,8 +409,29 @@ function DeleteConfirm({ item, onConfirm, onClose }) {
   );
 }
 
+// ─── Note Display (timestamped log) ───
+function NoteDisplay({ text }) {
+  if (!text) return <span style={{ color: "#52525b" }}>-</span>;
+  const lines = text.split("\n").filter(l => l.trim());
+  if (lines.length === 0) return <span style={{ color: "#52525b" }}>-</span>;
+  if (lines.length === 1) {
+    const m = lines[0].match(/^(\d{1,2}\.\d{1,2})\s+(.*)$/);
+    if (m) return <span><span style={{ color: "#60a5fa", fontWeight: 700, fontSize: 11 }}>{m[1]}</span> <span>{m[2]}</span></span>;
+    return <span>{lines[0]}</span>;
+  }
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+      {lines.map((line, i) => {
+        const m = line.match(/^(\d{1,2}\.\d{1,2})\s+(.*)$/);
+        if (m) return <div key={i}><span style={{ color: "#60a5fa", fontWeight: 700, fontSize: 11 }}>{m[1]}</span> <span style={{ color: "#e4e4e7" }}>{m[2]}</span></div>;
+        return <div key={i} style={{ color: "#e4e4e7" }}>{line}</div>;
+      })}
+    </div>
+  );
+}
+
 // ─── Task Table ───
-function TaskTable({ cat, columns, data, onUpdate, onDelete, onAdd, engineers, onMigrate, onPin, hideResolved, setHideResolved, sortState, onSort }) {
+function TaskTable({ cat, columns, data, onUpdate, onDelete, onAdd, engineers, onMigrate, onPin, hideResolved, sortState, onSort }) {
   const [editId, setEditId] = useState(null);
   const [editData, setEditData] = useState({});
   const [deleteItem, setDeleteItem] = useState(null);
@@ -420,8 +443,15 @@ function TaskTable({ cat, columns, data, onUpdate, onDelete, onAdd, engineers, o
 
   // Handle inline edit save
   const saveInline = (row) => {
-    if (inlineEdit && inlineValue !== (row[inlineEdit.key] || "")) {
-      onUpdate({ ...row, [inlineEdit.key]: inlineValue });
+    if (inlineEdit) {
+      if (inlineEdit.key === "note") {
+        if (inlineValue.trim()) {
+          const newNote = `${todayNotePrefix()} ${inlineValue.trim()}${row.note ? "\n" + row.note : ""}`;
+          onUpdate({ ...row, note: newNote });
+        }
+      } else if (inlineValue !== (row[inlineEdit.key] || "")) {
+        onUpdate({ ...row, [inlineEdit.key]: inlineValue });
+      }
     }
     setInlineEdit(null);
   };
@@ -455,7 +485,6 @@ function TaskTable({ cat, columns, data, onUpdate, onDelete, onAdd, engineers, o
     <div>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
         <button style={S.btn} onClick={onAdd}>{I.plus} 新增记录</button>
-        <button style={{ ...S.btn, ...S.btnGhost }} onClick={() => setHideResolved(!hideResolved)}>{hideResolved ? I.eye : I.eyeOff} {hideResolved ? "显示已解决" : "隐藏已解决"}</button>
         <button style={{ ...S.btn, ...S.btnGhost }} onClick={() => exportCSV(sorted, columns, `${cat}_${todayStr()}.csv`)}>{I.download} 导出CSV</button>
         <div style={{ marginLeft: "auto", position: "relative" }}>
           <input style={{ ...S.input, width: 200, paddingLeft: 30 }} placeholder="搜索客户/问题/序列号..." value={searchText} onChange={e => setSearchText(e.target.value)} />
@@ -512,15 +541,16 @@ function TaskTable({ cat, columns, data, onUpdate, onDelete, onAdd, engineers, o
                       ) : (
                         editableFields.includes(c.key) && inlineEdit?.rowId === row.id && inlineEdit?.key === c.key ? (
                           <input ref={inlineRef} style={{ ...S.input, fontSize: 13 }} value={inlineValue} autoFocus
+                            placeholder={c.key === "note" ? "添加备注更新..." : ""}
                             onChange={e => setInlineValue(e.target.value)}
                             onBlur={() => saveInline(row)}
                             onKeyDown={e => { if (e.key === "Enter") saveInline(row); if (e.key === "Escape") setInlineEdit(null); }} />
                         ) : (
-                          <div style={{ display: "flex", alignItems: "center", gap: 4, cursor: editableFields.includes(c.key) ? "text" : "default", minHeight: 20, padding: "1px 2px", borderRadius: 4, transition: "background 0.1s" }}
-                            onDoubleClick={() => { if (editableFields.includes(c.key)) { setInlineEdit({ rowId: row.id, key: c.key }); setInlineValue(row[c.key] || ""); } }}
-                            title={editableFields.includes(c.key) ? "双击编辑" : ""}>
-                            <span style={{ color: c.key === "date" ? "#a1a1aa" : "#e4e4e7" }}>{row[c.key] || "-"}</span>
-                            {(c.key === "problem" || c.key === "content" || c.key === "note") && row[c.key] && <TranslateBtn text={row[c.key]} />}
+                          <div style={{ display: "flex", alignItems: "flex-start", gap: 4, cursor: editableFields.includes(c.key) ? "text" : "default", minHeight: 20, padding: "1px 2px", borderRadius: 4, transition: "background 0.1s" }}
+                            onDoubleClick={() => { if (editableFields.includes(c.key)) { setInlineEdit({ rowId: row.id, key: c.key }); setInlineValue(c.key === "note" ? "" : (row[c.key] || "")); } }}
+                            title={c.key === "note" ? "双击添加备注更新" : editableFields.includes(c.key) ? "双击编辑" : ""}>
+                            {c.key === "note" ? <NoteDisplay text={row[c.key]} /> : <span style={{ color: c.key === "date" ? "#a1a1aa" : "#e4e4e7" }}>{row[c.key] || "-"}</span>}
+                            {(c.key === "problem" || c.key === "content") && row[c.key] && <TranslateBtn text={row[c.key]} />}
                           </div>
                         )
                       )
@@ -558,7 +588,20 @@ function AddModal({ cat, columns, onSave, onClose, defaultOwners, engineers }) {
   columns.forEach(c => { init[c.key] = c.key === "date" ? todayStr() : c.key === "status" ? "ongoing" : c.key === "owners" ? (defaultOwners || []) : ""; });
   const [data, setData] = useState(init);
   const [customCraft, setCustomCraft] = useState(false);
+  const [dateMode, setDateMode] = useState("single");
+  const [endDate, setEndDate] = useState(todayStr());
   const fileFields = cat === "paidRepair" ? ["invoice"] : [];
+
+  const handleSave = () => {
+    if (dateMode === "range" && endDate && endDate >= data.date) {
+      const dates = getDatesInRange(data.date, endDate);
+      onSave(data, dates);
+    } else {
+      onSave(data, null);
+    }
+    onClose();
+  };
+
   return (
     <div style={S.modal} onClick={onClose}>
       <div style={S.modalBox} onClick={e => e.stopPropagation()}>
@@ -569,7 +612,26 @@ function AddModal({ cat, columns, onSave, onClose, defaultOwners, engineers }) {
               <label style={{ fontSize: 11, color: "#a1a1aa", marginBottom: 3, display: "block", fontWeight: 600 }}>{c.label}</label>
               {c.key === "status" ? <select style={S.input} value={data.status} onChange={e => setData({ ...data, status: e.target.value })}><option value="ongoing">Ongoing</option><option value="pending">Pending</option><option value="已解决">已解决</option></select>
               : c.key === "owners" ? <OwnerSelect value={data.owners || []} engineers={engineers} onChange={v => setData({ ...data, owners: v })} />
-              : c.key === "date" ? <input type="date" style={S.input} value={data.date} onChange={e => setData({ ...data, date: e.target.value })} />
+              : c.key === "date" ? (
+                <div>
+                  <div style={{ display: "flex", gap: 4, marginBottom: 6 }}>
+                    <button type="button" style={{ ...S.btn, ...(dateMode === "single" ? {} : S.btnGhost), ...S.btnSm }} onClick={() => setDateMode("single")}>单天</button>
+                    <button type="button" style={{ ...S.btn, ...(dateMode === "range" ? {} : S.btnGhost), ...S.btnSm }} onClick={() => setDateMode("range")}>连续天数</button>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <input type="date" style={{ ...S.input, flex: 1 }} value={data.date} onChange={e => setData({ ...data, date: e.target.value })} />
+                    {dateMode === "range" && <>
+                      <span style={{ color: "#71717a", fontSize: 12, whiteSpace: "nowrap" }}>至</span>
+                      <input type="date" style={{ ...S.input, flex: 1 }} value={endDate} min={data.date} onChange={e => setEndDate(e.target.value)} />
+                    </>}
+                  </div>
+                  {dateMode === "range" && endDate >= data.date && (
+                    <div style={{ fontSize: 11, color: "#71717a", marginTop: 4 }}>
+                      共 {getDatesInRange(data.date, endDate).length} 天，每天创建一条记录
+                    </div>
+                  )}
+                </div>
+              )
               : fileFields.includes(c.key) ? <div><label style={{ ...S.btn, ...S.btnGhost, padding: "6px 12px", fontSize: 12, cursor: "pointer" }}>{I.upload} 上传PDF<input type="file" accept=".pdf" style={{ display: "none" }} onChange={async e => { if (e.target.files[0]) { const f = e.target.files[0]; const fname = `${Date.now()}_${f.name}`; await supabase.storage.from("invoices").upload(fname, f); setData({ ...data, [c.key]: fname }); } }} /></label>{data[c.key] && <span style={{ marginLeft: 8, fontSize: 12, color: "#818cf8" }}>✓ {data[c.key].length > 20 ? data[c.key].slice(0, 17) + "..." : data[c.key]}</span>}</div>
               : c.key === "task_type" ? <select style={S.input} value={data.task_type || ""} onChange={e => setData({ ...data, task_type: e.target.value })}><option value="">选择类型...</option><option value="程序开发">程序开发</option><option value="仿真">仿真</option><option value="安装对接">安装对接</option><option value="培训">培训</option><option value="验收">验收</option><option value="其他">其他</option></select>
               : c.key === "craft" ? (
@@ -590,13 +652,13 @@ function AddModal({ cat, columns, onSave, onClose, defaultOwners, engineers }) {
                   )}
                 </div>
               )
-              : <input style={S.input} value={data[c.key] || ""} onChange={e => setData({ ...data, [c.key]: e.target.value })} placeholder={c.label} />}
+              : <input style={S.input} value={data[c.key] || ""} onChange={e => setData({ ...data, [c.key]: e.target.value })} placeholder={c.key === "note" ? "初始备注（可选）" : c.label} />}
             </div>
           ))}
         </div>
         <div style={{ display: "flex", gap: 8, marginTop: 18, justifyContent: "flex-end" }}>
           <button style={{ ...S.btn, ...S.btnGhost }} onClick={onClose}>取消</button>
-          <button style={S.btn} onClick={() => { onSave(data); onClose(); }}>保存</button>
+          <button style={S.btn} onClick={handleSave}>保存</button>
         </div>
       </div>
     </div>
@@ -708,7 +770,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState("preSales");
   const [activeSubTab, setActiveSubTab] = useState("tickets");
   const [showAdd, setShowAdd] = useState(null);
-  const [hideResolved, setHideResolved] = useState({});
+  const [hideResolved, setHideResolved] = useState(false);
   const [sortState, setSortState] = useState({});
   const [migrateTicket, setMigrateTicket] = useState(null);
   const [showExport, setShowExport] = useState(false);
@@ -764,10 +826,22 @@ export default function App() {
   const addReg = async (name) => { await supabase.from("regions").insert({ name }); logAction("创建区域", "", name, ""); fetchAll(); };
   const delReg = async (id) => { const r = regions.find(x => x.id === id); await supabase.from("regions").delete().eq("id", id); logAction("删除区域", "", r?.name || "", ""); fetchAll(); };
 
+  const buildTaskRow = (cat, data) => {
+    const rawNote = data.note || "";
+    const note = rawNote ? `${todayNotePrefix()} ${rawNote}` : "";
+    return { category: cat, date: data.date || todayStr(), customer: data.customer || "", sales: data.sales || "", problem: data.problem || "", status: data.status || "ongoing", note, owners: data.owners || [], serial_no: data.serial_no || "", order_no: data.order_no || "", content: data.content || "", task_type: data.task_type || "", quote: data.quote || "", invoice: data.invoice || "", project_desc: data.project_desc || "", craft: data.craft || "", requirement: data.requirement || "" };
+  };
+
   const addTask = async (cat, data) => {
-    const row = { category: cat, date: data.date || todayStr(), customer: data.customer || "", sales: data.sales || "", problem: data.problem || "", status: data.status || "ongoing", note: data.note || "", owners: data.owners || [], serial_no: data.serial_no || "", order_no: data.order_no || "", content: data.content || "", task_type: data.task_type || "", quote: data.quote || "", invoice: data.invoice || "", project_desc: data.project_desc || "", craft: data.craft || "", requirement: data.requirement || "" };
-    await supabase.from("tasks").insert(row);
+    await supabase.from("tasks").insert(buildTaskRow(cat, data));
     logAction("新增", cat, data.customer || "", data.problem || data.content || "");
+    fetchAll();
+  };
+
+  const addTaskRange = async (cat, data, dates) => {
+    const rows = dates.map(d => buildTaskRow(cat, { ...data, date: d }));
+    await supabase.from("tasks").insert(rows);
+    logAction("新增(连续)", cat, data.customer || "", `${dates[0]} ~ ${dates[dates.length - 1]}`);
     fetchAll();
   };
 
@@ -1009,19 +1083,19 @@ export default function App() {
           <div style={{ display: "flex", gap: 4, marginBottom: 16 }}>{Object.entries(sub).map(([k, v]) => <button key={k} style={S.tab(activeSubTab === k)} onClick={() => setActiveSubTab(k)}>{v}</button>)}</div>
           <TaskTable cat={activeSubTab} columns={COL[activeSubTab]} data={getFiltered(activeSubTab)} onUpdate={updateTask} onDelete={deleteTask} onAdd={() => setShowAdd(activeSubTab)} engineers={engineers}
             onMigrate={activeSubTab === "tickets" ? t => setMigrateTicket(t) : null} onPin={pinTask}
-            hideResolved={hideResolved[activeSubTab]} setHideResolved={v => setHideResolved({ ...hideResolved, [activeSubTab]: v })}
+            hideResolved={hideResolved}
             sortState={sortState[activeSubTab]} onSort={f => handleSort(activeSubTab, f)} />
         </div>
       );
     }
     if (activeTab === "keyProject") {
       return <TaskTable cat="keyProject" columns={COL.keyProject} data={getFiltered("keyProject")} onUpdate={updateTask} onDelete={deleteTask} onAdd={() => setShowAdd("keyProject")} engineers={engineers} onPin={pinTask}
-        hideResolved={hideResolved.keyProject} setHideResolved={v => setHideResolved({ ...hideResolved, keyProject: v })}
+        hideResolved={hideResolved}
         sortState={sortState.keyProject} onSort={f => handleSort("keyProject", f)} />;
     }
     const cat = activeTab;
     return <TaskTable cat={cat} columns={COL[cat]} data={getFiltered(cat)} onUpdate={updateTask} onDelete={deleteTask} onAdd={() => setShowAdd(cat)} engineers={engineers} onPin={pinTask}
-      hideResolved={hideResolved[cat]} setHideResolved={v => setHideResolved({ ...hideResolved, [cat]: v })}
+      hideResolved={hideResolved}
       sortState={sortState[cat]} onSort={f => handleSort(cat, f)} />;
   };
 
@@ -1100,13 +1174,14 @@ export default function App() {
               <button style={{ ...S.tab(activeTab === "dashboard"), background: activeTab === "dashboard" ? "#059669" : "transparent" }} onClick={() => setActiveTab("dashboard")}>📊 Dashboard</button>
             </div>
             <button style={{ ...S.btn, background: "#7c3aed" }} onClick={() => setShowExport(true)}>{I.exportAll} 一键导出周报</button>
+            <button style={{ ...S.btn, ...S.btnGhost }} onClick={() => setHideResolved(!hideResolved)}>{hideResolved ? I.eye : I.eyeOff} {hideResolved ? "显示已解决" : "隐藏已解决"}</button>
             <button style={{ ...S.btn, ...S.btnGhost, marginLeft: "auto" }} onClick={() => setShowTheme(true)}>{I.palette} 显示设置</button>
           </div>
           {renderContent()}
           </>}
         </div>
       </div>
-      {showAdd && <AddModal cat={showAdd} columns={COL[showAdd] || []} onSave={data => addTask(showAdd, data)} onClose={() => setShowAdd(null)} defaultOwners={defOwners} engineers={engineers} />}
+      {showAdd && <AddModal cat={showAdd} columns={COL[showAdd] || []} onSave={(data, dates) => dates ? addTaskRange(showAdd, data, dates) : addTask(showAdd, data)} onClose={() => setShowAdd(null)} defaultOwners={defOwners} engineers={engineers} />}
       {migrateTicket && <MigrateModal ticket={migrateTicket} onMigrate={handleMigrate} onClose={() => setMigrateTicket(null)} />}
       {showExport && <ExportModal tasks={tasks} engineers={engineers} regions={regions} currentUser={currentUser} isAdmin={isAdmin} onClose={() => setShowExport(false)} />}
       {showLogs && (
