@@ -409,6 +409,57 @@ function DeleteConfirm({ item, onConfirm, onClose }) {
   );
 }
 
+// ─── Toast ───
+function Toast({ message, type, onHide }) {
+  useEffect(() => { const t = setTimeout(onHide, 3000); return () => clearTimeout(t); }, [onHide]);
+  const bg = type === "error" ? "#dc2626" : type === "info" ? "#2563eb" : "#16a34a";
+  return (
+    <div style={{ position: "fixed", bottom: 28, right: 28, zIndex: 9999, background: bg, color: "#fff", padding: "10px 20px", borderRadius: 9, fontSize: 13, fontWeight: 600, boxShadow: "0 4px 16px rgba(0,0,0,0.35)", display: "flex", alignItems: "center", gap: 8, animation: "fadeIn 0.2s" }}>
+      {type === "error" ? "✕" : "✓"} {message}
+    </div>
+  );
+}
+
+// ─── Global Search ───
+function GlobalSearch({ tasks, onNavigate }) {
+  const [q, setQ] = useState("");
+  const [open, setOpen] = useState(false);
+  const catLabel = { preSales: "售前", midSales: "售中", keyProject: "Key Project", tickets: "Ticket", warranty: "质保", paidRepair: "付费维修" };
+  const results = q.trim().length >= 1
+    ? tasks.filter(t => [t.customer, t.problem, t.content, t.serial_no, t.note, t.sales, t.project_desc, t.order_no].some(v => v && v.toLowerCase().includes(q.toLowerCase()))).slice(0, 15)
+    : [];
+  return (
+    <div style={{ position: "relative" }}>
+      <div style={{ position: "relative" }}>
+        <input style={{ ...S.input, width: 210, paddingLeft: 30 }} placeholder="全局搜索..." value={q}
+          onChange={e => { setQ(e.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 180)} />
+        <span style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", color: "#71717a" }}>{I.search}</span>
+      </div>
+      {open && q.trim() && (
+        <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, minWidth: 320, background: "#18181b", border: "1px solid #27272a", borderRadius: 9, zIndex: 500, maxHeight: 380, overflowY: "auto", boxShadow: "0 8px 28px rgba(0,0,0,0.45)" }}>
+          {results.length === 0 && <div style={{ padding: "14px 16px", color: "#52525b", fontSize: 13 }}>无匹配结果</div>}
+          {results.map(t => (
+            <div key={t.id} style={{ padding: "9px 14px", borderBottom: "1px solid #27272a", cursor: "pointer" }}
+              onMouseDown={() => { onNavigate(t); setQ(""); setOpen(false); }}
+              onMouseEnter={e => e.currentTarget.style.background = "#27272a"}
+              onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+              <div style={{ display: "flex", gap: 7, alignItems: "center", marginBottom: 2 }}>
+                <span style={{ fontSize: 10, color: "#60a5fa", background: "#2563eb18", padding: "1px 6px", borderRadius: 4, fontWeight: 700, flexShrink: 0 }}>{catLabel[t.category] || t.category}</span>
+                <span style={{ fontSize: 13, color: "#e4e4e7", fontWeight: 600 }}>{t.customer || "-"}</span>
+                <span style={{ fontSize: 11, color: "#52525b", marginLeft: "auto" }}>{t.date}</span>
+              </div>
+              <div style={{ fontSize: 12, color: "#71717a" }}>{(t.problem || t.content || t.project_desc || t.note || "").slice(0, 70)}</div>
+            </div>
+          ))}
+          {results.length === 15 && <div style={{ padding: "7px 14px", color: "#52525b", fontSize: 11 }}>仅显示前 15 条</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Note Display (timestamped log) ───
 function NoteDisplay({ text }) {
   if (!text) return <span style={{ color: "#52525b" }}>-</span>;
@@ -513,6 +564,9 @@ function TaskTable({ cat, columns, data, onUpdate, onDelete, onAdd, engineers, o
                       : c.key === "date" ? <input type="date" style={{ ...S.input, width: 130 }} value={editData.date || ""} onChange={e => setEditData({ ...editData, date: e.target.value })} />
                       : c.key === "timer" ? <span style={{ color: "#71717a", fontSize: 12 }}>自动</span>
                       : fileFields.includes(c.key) ? <label style={{ ...S.btn, ...S.btnGhost, ...S.btnSm, cursor: "pointer" }}>{I.upload} PDF<input type="file" accept=".pdf" style={{ display: "none" }} onChange={async e => { if (e.target.files[0]) { const f = e.target.files[0]; const fname = `${Date.now()}_${f.name}`; await supabase.storage.from("invoices").upload(fname, f); setEditData({ ...editData, [c.key]: fname }); } }} /></label>
+                      : c.key === "craft" ? <select style={{ ...S.input, width: 130 }} value={editData.craft || ""} onChange={e => setEditData({ ...editData, craft: e.target.value })}><option value="">选择工艺...</option>{CRAFT_PRESETS.map(p => <option key={p} value={p}>{p}</option>)}{editData.craft && !CRAFT_PRESETS.includes(editData.craft) && <option value={editData.craft}>{editData.craft}</option>}</select>
+                      : c.key === "note" ? <div style={{ fontSize: 12, color: "#71717a", padding: "5px 0", fontStyle: "italic" }}>双击备注单元格可追加更新</div>
+                      : c.key === "quote" ? <input type="number" min="0" step="0.01" style={S.input} value={editData[c.key] || ""} onChange={e => setEditData({ ...editData, [c.key]: e.target.value })} placeholder="0" />
                       : <input style={S.input} value={editData[c.key] || ""} onChange={e => setEditData({ ...editData, [c.key]: e.target.value })} />
                     ) : (
                       c.key === "status" ? (
@@ -523,6 +577,7 @@ function TaskTable({ cat, columns, data, onUpdate, onDelete, onAdd, engineers, o
                             onUpdate({ ...row, status: ns, resolved_at: ns === "已解决" ? nowISO() : null });
                           }}>{row.status === "已解决" && <span style={{ color: "#fff" }}>{I.check}</span>}</div>
                           <span style={S.tag(row.status)}>{row.status === "已解决" ? "已解决" : row.status === "pending" ? "Pending" : "Ongoing"}</span>
+                          {row._hasKeyProject && <span style={{ fontSize: 10, color: "#34d399", background: "#10b98114", border: "1px solid #34d39930", padding: "1px 5px", borderRadius: 4, fontWeight: 700, whiteSpace: "nowrap" }}>🔗 KP</span>}
                         </div>
                       ) : c.key === "owners" ? (
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
@@ -549,7 +604,7 @@ function TaskTable({ cat, columns, data, onUpdate, onDelete, onAdd, engineers, o
                           <div style={{ display: "flex", alignItems: "flex-start", gap: 4, cursor: editableFields.includes(c.key) ? "text" : "default", minHeight: 20, padding: "1px 2px", borderRadius: 4, transition: "background 0.1s" }}
                             onDoubleClick={() => { if (editableFields.includes(c.key)) { setInlineEdit({ rowId: row.id, key: c.key }); setInlineValue(c.key === "note" ? "" : (row[c.key] || "")); } }}
                             title={c.key === "note" ? "双击添加备注更新" : editableFields.includes(c.key) ? "双击编辑" : ""}>
-                            {c.key === "note" ? <NoteDisplay text={row[c.key]} /> : <span style={{ color: c.key === "date" ? "#a1a1aa" : "#e4e4e7" }}>{row[c.key] || "-"}</span>}
+                            {c.key === "note" ? <NoteDisplay text={row[c.key]} /> : c.key === "quote" && row[c.key] ? <span style={{ color: "#fbbf24", fontFamily: "monospace", fontWeight: 600 }}>¥{Number(row[c.key]).toLocaleString("zh-CN")}</span> : <span style={{ color: c.key === "date" ? "#a1a1aa" : "#e4e4e7" }}>{row[c.key] || "-"}</span>}
                             {(c.key === "problem" || c.key === "content") && row[c.key] && <TranslateBtn text={row[c.key]} />}
                           </div>
                         )
@@ -656,6 +711,7 @@ function AddModal({ cat, columns, onSave, onClose, defaultOwners, engineers }) {
                   )}
                 </div>
               )
+              : c.key === "quote" ? <input type="number" min="0" step="0.01" style={S.input} value={data[c.key] || ""} onChange={e => setData({ ...data, [c.key]: e.target.value })} placeholder="0" />
               : <input style={S.input} value={data[c.key] || ""} onChange={e => setData({ ...data, [c.key]: e.target.value })} placeholder={c.key === "note" ? "初始备注（可选）" : c.label} />}
             </div>
           ))}
@@ -816,6 +872,8 @@ export default function App() {
     catch { return { bg: "dark", fontSize: 13 }; }
   });
   const saveTheme = (t) => { setTheme(t); localStorage.setItem("ae_theme", JSON.stringify(t)); };
+  const [toast, setToast] = useState(null);
+  const showToast = useCallback((message, type = "success") => { setToast({ message, type, key: Date.now() }); }, []);
 
   // ─── Fetch all data from Supabase ───
   const fetchAll = useCallback(async () => {
@@ -832,6 +890,29 @@ export default function App() {
   }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  // ─── Supabase Realtime ───
+  useEffect(() => {
+    if (!currentUser) return;
+    const ch = supabase.channel("ae-realtime")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "tasks" }, ({ new: row }) => {
+        setTasks(prev => prev.find(t => t.id === row.id) ? prev : [row, ...prev]);
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "tasks" }, ({ new: row }) => {
+        setTasks(prev => prev.map(t => t.id === row.id ? { ...t, ...row } : t));
+      })
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "tasks" }, ({ old: row }) => {
+        setTasks(prev => prev.filter(t => t.id !== row.id));
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "engineers" }, () => {
+        supabase.from("engineers").select("*").order("created_at").then(({ data }) => setEngineers(data || []));
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "regions" }, () => {
+        supabase.from("regions").select("*").order("created_at").then(({ data }) => setRegions(data || []));
+      })
+      .subscribe();
+    return () => supabase.removeChannel(ch);
+  }, [currentUser]);
 
   // Auto-select engineer on login
   useEffect(() => {
@@ -866,36 +947,46 @@ export default function App() {
   };
 
   const addTask = async (cat, data) => {
-    await supabase.from("tasks").insert(buildTaskRow(cat, data));
+    const { data: inserted, error } = await supabase.from("tasks").insert(buildTaskRow(cat, data)).select().single();
+    if (error) { showToast("保存失败，请重试", "error"); return; }
+    setTasks(prev => [inserted, ...prev]);
     logAction("新增", cat, data.customer || "", data.problem || data.content || "");
-    fetchAll();
+    showToast("已保存");
   };
 
   const addTaskRange = async (cat, data, dates) => {
     const rows = dates.map(d => buildTaskRow(cat, { ...data, date: d }));
-    await supabase.from("tasks").insert(rows);
+    const { data: inserted, error } = await supabase.from("tasks").insert(rows).select();
+    if (error) { showToast("批量保存失败，请重试", "error"); return; }
+    setTasks(prev => [...(inserted || []), ...prev]);
     logAction("新增(连续)", cat, data.customer || "", `${dates[0]} ~ ${dates[dates.length - 1]}`);
-    fetchAll();
+    showToast(`已创建 ${dates.length} 条记录`);
   };
 
   const updateTask = async (row) => {
+    const snapshot = tasks;
+    setTasks(prev => prev.map(t => t.id === row.id ? { ...t, ...row } : t));
     const { id, created_at, ...updates } = row;
-    await supabase.from("tasks").update(updates).eq("id", id);
+    const { error } = await supabase.from("tasks").update(updates).eq("id", id);
+    if (error) { setTasks(snapshot); showToast("更新失败，请重试", "error"); return; }
     logAction("更新", row.category || "", row.customer || "", row.status === "已解决" ? "标记已解决" : "编辑记录");
-    fetchAll();
   };
 
   const deleteTask = async (id) => {
     const t = tasks.find(x => x.id === id);
-    await supabase.from("tasks").delete().eq("id", id);
+    const snapshot = tasks;
+    setTasks(prev => prev.filter(x => x.id !== id));
+    const { error } = await supabase.from("tasks").delete().eq("id", id);
+    if (error) { setTasks(snapshot); showToast("删除失败，请重试", "error"); return; }
     logAction("删除", t?.category || "", t?.customer || "", t?.problem || "");
-    fetchAll();
+    showToast("已删除");
   };
 
   const pinTask = async (row) => {
-    await supabase.from("tasks").update({ pinned: !row.pinned }).eq("id", row.id);
+    setTasks(prev => prev.map(t => t.id === row.id ? { ...t, pinned: !row.pinned } : t));
+    const { error } = await supabase.from("tasks").update({ pinned: !row.pinned }).eq("id", row.id);
+    if (error) { setTasks(prev => prev.map(t => t.id === row.id ? { ...t, pinned: row.pinned } : t)); showToast("操作失败", "error"); return; }
     logAction(row.pinned ? "取消置顶" : "置顶", row.category, row.customer || "", "");
-    fetchAll();
   };
 
   const handleMigrate = async (ticket, target) => {
@@ -1165,9 +1256,19 @@ export default function App() {
         sortState={sortState.keyProject} onSort={f => handleSort("keyProject", f)} />;
     }
     const cat = activeTab;
-    return <TaskTable cat={cat} columns={COL[cat]} data={getFiltered(cat)} onUpdate={updateTask} onDelete={deleteTask} onAdd={() => setShowAdd(cat)} engineers={engineers} onPin={pinTask}
+    const catData = cat === "preSales"
+      ? getFiltered("preSales").map(r => ({ ...r, _hasKeyProject: tasks.some(t => t.category === "keyProject" && t.customer === r.customer && (t.note || "").includes("从售前咨询转入")) }))
+      : getFiltered(cat);
+    return <TaskTable cat={cat} columns={COL[cat]} data={catData} onUpdate={updateTask} onDelete={deleteTask} onAdd={() => setShowAdd(cat)} engineers={engineers} onPin={pinTask}
       hideResolved={hideResolved}
       sortState={sortState[cat]} onSort={f => handleSort(cat, f)} />;
+  };
+
+  const handleNavigate = (task) => {
+    const tabMap = { preSales: "preSales", midSales: "midSales", keyProject: "keyProject", tickets: "afterSales", warranty: "afterSales", paidRepair: "afterSales" };
+    const subMap = { tickets: "tickets", warranty: "warranty", paidRepair: "paidRepair" };
+    setActiveTab(tabMap[task.category] || task.category);
+    if (subMap[task.category]) setActiveSubTab(subMap[task.category]);
   };
 
   const themeColors = {
@@ -1246,6 +1347,7 @@ export default function App() {
             </div>
             <button style={{ ...S.btn, background: "#7c3aed" }} onClick={() => setShowExport(true)}>{I.exportAll} 一键导出周报</button>
             <button style={{ ...S.btn, ...S.btnGhost }} onClick={() => setHideResolved(!hideResolved)}>{hideResolved ? I.eye : I.eyeOff} {hideResolved ? "显示已解决" : "隐藏已解决"}</button>
+            <GlobalSearch tasks={tasks} onNavigate={handleNavigate} />
             <button style={{ ...S.btn, ...S.btnGhost, marginLeft: "auto" }} onClick={() => setShowTheme(true)}>{I.palette} 显示设置</button>
           </div>
           {renderContent()}
@@ -1319,6 +1421,7 @@ export default function App() {
           </div>
         </div>
       )}
+      {toast && <Toast key={toast.key} message={toast.message} type={toast.type} onHide={() => setToast(null)} />}
     </div>
   );
 }
