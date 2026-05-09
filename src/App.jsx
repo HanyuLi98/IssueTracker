@@ -604,7 +604,7 @@ function TaskTable({ cat, columns, data, onUpdate, onDelete, onAdd, engineers, o
                           <div style={{ display: "flex", alignItems: "flex-start", gap: 4, cursor: editableFields.includes(c.key) ? "text" : "default", minHeight: 20, padding: "1px 2px", borderRadius: 4, transition: "background 0.1s" }}
                             onDoubleClick={() => { if (editableFields.includes(c.key)) { setInlineEdit({ rowId: row.id, key: c.key }); setInlineValue(c.key === "note" ? "" : (row[c.key] || "")); } }}
                             title={c.key === "note" ? "双击添加备注更新" : editableFields.includes(c.key) ? "双击编辑" : ""}>
-                            {c.key === "note" ? <NoteDisplay text={row[c.key]} /> : c.key === "quote" && row[c.key] ? <span style={{ color: "#fbbf24", fontFamily: "monospace", fontWeight: 600 }}>¥{Number(row[c.key]).toLocaleString("zh-CN")}</span> : <span style={{ color: c.key === "date" ? "#a1a1aa" : "#e4e4e7" }}>{row[c.key] || "-"}</span>}
+                            {c.key === "note" ? <NoteDisplay text={row[c.key]} /> : c.key === "quote" && row[c.key] ? <span style={{ color: "#fbbf24", fontWeight: 600 }}>¥{Math.round(Number(row[c.key])).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")}</span> : <span style={{ color: c.key === "date" ? "#a1a1aa" : "#e4e4e7" }}>{row[c.key] || "-"}</span>}
                             {(c.key === "problem" || c.key === "content") && row[c.key] && <TranslateBtn text={row[c.key]} />}
                           </div>
                         )
@@ -963,11 +963,14 @@ export default function App() {
     showToast(`已创建 ${dates.length} 条记录`);
   };
 
+  // Only send real DB columns — strip computed/virtual fields like _hasKeyProject
+  const TASK_DB_COLS = new Set(["category","date","customer","sales","problem","status","note","owners","serial_no","order_no","content","task_type","quote","invoice","project_desc","craft","requirement","pinned","resolved_at"]);
+
   const updateTask = async (row) => {
     const snapshot = tasks;
     setTasks(prev => prev.map(t => t.id === row.id ? { ...t, ...row } : t));
-    const { id, created_at, ...updates } = row;
-    const { error } = await supabase.from("tasks").update(updates).eq("id", id);
+    const updates = Object.fromEntries(Object.entries(row).filter(([k]) => TASK_DB_COLS.has(k)));
+    const { error } = await supabase.from("tasks").update(updates).eq("id", row.id);
     if (error) { setTasks(snapshot); showToast("更新失败，请重试", "error"); return; }
     logAction("更新", row.category || "", row.customer || "", row.status === "已解决" ? "标记已解决" : "编辑记录");
   };
@@ -1204,7 +1207,7 @@ export default function App() {
       const sub = { tickets: "Ticket", warranty: "质保内维修", paidRepair: "付费维修及易损件" };
       const QMONTHS = { 1: [1,2,3], 2: [4,5,6], 3: [7,8,9], 4: [10,11,12] };
       const parseQ = (q) => { const n = parseFloat((q || "").replace(/[^0-9.]/g, "")); return isNaN(n) ? 0 : n; };
-      const fmtMoney = (n) => `¥${n.toLocaleString("zh-CN", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+      const fmtMoney = (n) => n > 0 ? `¥${Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")}` : "¥0";
 
       const paidRaw = getFiltered("paidRepair");
       const paidByQ = quarterFilter.length > 0
