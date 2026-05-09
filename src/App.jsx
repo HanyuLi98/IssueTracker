@@ -590,14 +590,18 @@ function AddModal({ cat, columns, onSave, onClose, defaultOwners, engineers }) {
   const [customCraft, setCustomCraft] = useState(false);
   const [dateMode, setDateMode] = useState("single");
   const [endDate, setEndDate] = useState(todayStr());
+  const [isBigProject, setIsBigProject] = useState(false);
+  const [bpData, setBpData] = useState({ project_desc: "", craft: "", requirement: "" });
   const fileFields = cat === "paidRepair" ? ["invoice"] : [];
 
   const handleSave = () => {
+    const saveData = (cat === "preSales" && isBigProject)
+      ? { ...data, _isBigProject: true, _project_desc: bpData.project_desc, _craft: bpData.craft, _requirement: bpData.requirement }
+      : data;
     if (dateMode === "range" && endDate && endDate >= data.date) {
-      const dates = getDatesInRange(data.date, endDate);
-      onSave(data, dates);
+      onSave(saveData, getDatesInRange(data.date, endDate));
     } else {
-      onSave(data, null);
+      onSave(saveData, null);
     }
     onClose();
   };
@@ -656,9 +660,37 @@ function AddModal({ cat, columns, onSave, onClose, defaultOwners, engineers }) {
             </div>
           ))}
         </div>
+        {cat === "preSales" && (
+          <div style={{ borderTop: "1px solid #3f3f46", paddingTop: 14, marginTop: 14 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: isBigProject ? 12 : 0, cursor: "pointer" }} onClick={() => setIsBigProject(!isBigProject)}>
+              <div style={S.chk(isBigProject)}>{isBigProject && <span style={{ color: "#fff" }}>{I.check}</span>}</div>
+              <span style={{ fontSize: 13, color: "#e4e4e7", fontWeight: 600 }}>标记为大项目</span>
+              <span style={{ fontSize: 11, color: "#71717a" }}>（同步创建 Key Project 记录）</span>
+            </div>
+            {isBigProject && (
+              <div style={{ display: "grid", gap: 10, background: "#27272a", padding: 12, borderRadius: 8 }}>
+                <div>
+                  <label style={{ fontSize: 11, color: "#a1a1aa", marginBottom: 3, display: "block", fontWeight: 600 }}>项目描述</label>
+                  <input style={S.input} value={bpData.project_desc} onChange={e => setBpData({ ...bpData, project_desc: e.target.value })} placeholder="项目描述" />
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, color: "#a1a1aa", marginBottom: 3, display: "block", fontWeight: 600 }}>项目工艺</label>
+                  <select style={S.input} value={bpData.craft} onChange={e => setBpData({ ...bpData, craft: e.target.value })}>
+                    <option value="">选择工艺...</option>
+                    {CRAFT_PRESETS.map(p => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, color: "#a1a1aa", marginBottom: 3, display: "block", fontWeight: 600 }}>需求</label>
+                  <input style={S.input} value={bpData.requirement} onChange={e => setBpData({ ...bpData, requirement: e.target.value })} placeholder="项目需求" />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
         <div style={{ display: "flex", gap: 8, marginTop: 18, justifyContent: "flex-end" }}>
           <button style={{ ...S.btn, ...S.btnGhost }} onClick={onClose}>取消</button>
-          <button style={S.btn} onClick={handleSave}>保存</button>
+          <button style={S.btn} onClick={handleSave}>{cat === "preSales" && isBigProject ? "保存 + 创建 Key Project" : "保存"}</button>
         </div>
       </div>
     </div>
@@ -771,6 +803,7 @@ export default function App() {
   const [activeSubTab, setActiveSubTab] = useState("tickets");
   const [showAdd, setShowAdd] = useState(null);
   const [hideResolved, setHideResolved] = useState(false);
+  const [quarterFilter, setQuarterFilter] = useState([]);
   const [sortState, setSortState] = useState({});
   const [migrateTicket, setMigrateTicket] = useState(null);
   const [showExport, setShowExport] = useState(false);
@@ -961,7 +994,7 @@ export default function App() {
 
   // ─── MAIN ───
   const curEng = selectedEngineer ? engineers.find(e => e.id === selectedEngineer) : null;
-  const viewLabel = selectedRegion ? `区域: ${selectedRegion}` : (curEng ? `工程师: ${curEng.name}` : "全部概览");
+  const viewLabel = selectedRegion ? `区域: ${selectedRegion}` : (curEng ? curEng.name : "全部概览");
 
   const renderContent = () => {
     if (activeTab === "dashboard") {
@@ -1078,10 +1111,48 @@ export default function App() {
     }
     if (activeTab === "afterSales") {
       const sub = { tickets: "Ticket", warranty: "质保内维修", paidRepair: "付费维修及易损件" };
+      const QMONTHS = { 1: [1,2,3], 2: [4,5,6], 3: [7,8,9], 4: [10,11,12] };
+      const parseQ = (q) => { const n = parseFloat((q || "").replace(/[^0-9.]/g, "")); return isNaN(n) ? 0 : n; };
+      const fmtMoney = (n) => `¥${n.toLocaleString("zh-CN", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+
+      const paidRaw = getFiltered("paidRepair");
+      const paidByQ = quarterFilter.length > 0
+        ? paidRaw.filter(r => { const m = r.date ? new Date(r.date + "T00:00:00").getMonth() + 1 : 0; return quarterFilter.flatMap(q => QMONTHS[q]).includes(m); })
+        : paidRaw;
+      const paidTotal = paidByQ.reduce((s, r) => s + parseQ(r.quote), 0);
+      const paidOngoing = paidByQ.filter(r => r.status !== "已解决").reduce((s, r) => s + parseQ(r.quote), 0);
+      const paidResolved = paidByQ.filter(r => r.status === "已解决").reduce((s, r) => s + parseQ(r.quote), 0);
+      const tableData = activeSubTab === "paidRepair" ? paidByQ : getFiltered(activeSubTab);
+
       return (
         <div>
           <div style={{ display: "flex", gap: 4, marginBottom: 16 }}>{Object.entries(sub).map(([k, v]) => <button key={k} style={S.tab(activeSubTab === k)} onClick={() => setActiveSubTab(k)}>{v}</button>)}</div>
-          <TaskTable cat={activeSubTab} columns={COL[activeSubTab]} data={getFiltered(activeSubTab)} onUpdate={updateTask} onDelete={deleteTask} onAdd={() => setShowAdd(activeSubTab)} engineers={engineers}
+          {activeSubTab === "paidRepair" && (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 10, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 11, color: "#71717a", fontWeight: 700, letterSpacing: "0.05em" }}>季度</span>
+                <button style={{ ...S.btn, ...(quarterFilter.length === 0 ? {} : S.btnGhost), ...S.btnSm }} onClick={() => setQuarterFilter([])}>全年</button>
+                {[1,2,3,4].map(q => (
+                  <button key={q} style={{ ...S.btn, ...(quarterFilter.includes(q) ? {} : S.btnGhost), ...S.btnSm }}
+                    onClick={() => setQuarterFilter(qf => qf.includes(q) ? qf.filter(x => x !== q) : [...qf, q])}>Q{q}</button>
+                ))}
+                {quarterFilter.length > 0 && <span style={{ fontSize: 11, color: "#60a5fa" }}>{quarterFilter.map(q => `Q${q}`).join(" + ")}</span>}
+              </div>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                {[
+                  { label: "报价总额", val: paidTotal, clr: "#f87171" },
+                  { label: "进行中", val: paidOngoing, clr: "#fbbf24" },
+                  { label: "已解决", val: paidResolved, clr: "#4ade80" },
+                ].map(s => (
+                  <div key={s.label} style={{ ...S.card, padding: "10px 18px", flex: "none" }}>
+                    <div style={{ fontSize: 10, color: "#71717a", fontWeight: 600, marginBottom: 2 }}>{s.label}</div>
+                    <div style={{ fontSize: 20, fontWeight: 700, color: s.clr, fontFamily: "monospace" }}>{fmtMoney(s.val)}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          <TaskTable cat={activeSubTab} columns={COL[activeSubTab]} data={tableData} onUpdate={updateTask} onDelete={deleteTask} onAdd={() => setShowAdd(activeSubTab)} engineers={engineers}
             onMigrate={activeSubTab === "tickets" ? t => setMigrateTicket(t) : null} onPin={pinTask}
             hideResolved={hideResolved}
             sortState={sortState[activeSubTab]} onSort={f => handleSort(activeSubTab, f)} />
@@ -1181,7 +1252,13 @@ export default function App() {
           </>}
         </div>
       </div>
-      {showAdd && <AddModal cat={showAdd} columns={COL[showAdd] || []} onSave={(data, dates) => dates ? addTaskRange(showAdd, data, dates) : addTask(showAdd, data)} onClose={() => setShowAdd(null)} defaultOwners={defOwners} engineers={engineers} />}
+      {showAdd && <AddModal cat={showAdd} columns={COL[showAdd] || []} onSave={(data, dates) => {
+        const { _isBigProject, _project_desc, _craft, _requirement, ...cleanData } = data;
+        if (dates) { addTaskRange(showAdd, cleanData, dates); } else { addTask(showAdd, cleanData); }
+        if (_isBigProject && showAdd === "preSales") {
+          addTask("keyProject", { date: cleanData.date, customer: cleanData.customer, sales: cleanData.sales, project_desc: _project_desc || "", craft: _craft || "", requirement: _requirement || "", status: "ongoing", owners: cleanData.owners, note: "从售前咨询转入" });
+        }
+      }} onClose={() => setShowAdd(null)} defaultOwners={defOwners} engineers={engineers} />}
       {migrateTicket && <MigrateModal ticket={migrateTicket} onMigrate={handleMigrate} onClose={() => setMigrateTicket(null)} />}
       {showExport && <ExportModal tasks={tasks} engineers={engineers} regions={regions} currentUser={currentUser} isAdmin={isAdmin} onClose={() => setShowExport(false)} />}
       {showLogs && (
