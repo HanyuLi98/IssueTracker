@@ -661,7 +661,7 @@ function TaskTable({ cat, columns, data, onUpdate, onDelete, onAdd, engineers, o
           <tbody>
             {sorted.length === 0 && <tr><td colSpan={columns.length + 1} style={{ ...S.td, textAlign: "center", color: "#52525b", padding: 28 }}>暂无记录</td></tr>}
             {sorted.map(row => (
-              <tr key={row.id} onClick={e => { if (editId !== row.id && !e.target.closest("button,input,select,a,label")) setDrawerRow(row); }} style={{ background: row.pinned ? "#2563eb08" : row.status === "已解决" ? "#16a34a06" : "transparent", borderLeft: row.pinned ? "3px solid #2563eb" : "3px solid transparent", cursor: editId === row.id ? "default" : "pointer" }}>
+              <tr key={row.id} style={{ background: row.pinned ? "#2563eb08" : row.status === "已解决" ? "#16a34a06" : "transparent", borderLeft: row.pinned ? "3px solid #2563eb" : "3px solid transparent" }}>
                 {columns.map(c => (
                   <td key={c.key} style={S.td}>
                     {editId === row.id ? (
@@ -726,6 +726,7 @@ function TaskTable({ cat, columns, data, onUpdate, onDelete, onAdd, engineers, o
                     </div>
                   ) : (
                     <div style={{ display: "flex", gap: 3 }}>
+                      <button style={{ ...S.btn, ...S.btnGhost, ...S.btnSm, color: "#818cf8" }} onClick={() => setDrawerRow(row)} title="查看详情">{I.eye}</button>
                       <button style={{ ...S.btn, ...S.btnGhost, ...S.btnSm, color: row.pinned ? "#fbbf24" : "#71717a" }} onClick={() => onPin(row)} title={row.pinned ? "取消置顶" : "置顶"}>{I.pin}</button>
                       <button style={{ ...S.btn, ...S.btnGhost, ...S.btnSm }} onClick={() => { setEditId(row.id); setEditData({ ...row }); }} title="编辑">{I.edit}</button>
                       {cat === "tickets" && onMigrate && <button style={{ ...S.btn, ...S.btnGhost, ...S.btnSm, color: "#818cf8" }} onClick={() => onMigrate(row)} title="迁移">{I.migrate}</button>}
