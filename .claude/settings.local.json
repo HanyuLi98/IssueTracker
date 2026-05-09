@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\Administrator\\\\Desktop\\\\IssueTracker\\\\ae-supabase\" -Force)",
+      "Bash(Select-Object Name, Mode)",
+      "Bash(cd \"/c/Users/Administrator/Desktop/IssueTracker/ae-supabase\" && find src -type d | head -30)",
+      "Read(//c/c/Users/Administrator/Desktop/IssueTracker/ae-supabase/**)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(npm run *)",
+      "Bash(node node_modules/vite/bin/vite.js build)",
+      "Bash(npm install *)"
+    ]
+  }
+}
