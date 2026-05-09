@@ -6,6 +6,7 @@ const todayStr = () => new Date().toISOString().split("T")[0];
 const nowISO = () => new Date().toISOString();
 const todayNotePrefix = () => { const d = new Date(); return `${d.getMonth() + 1}.${d.getDate()}`; };
 const getDatesInRange = (s, e) => { const dates = []; const cur = new Date(s); const last = new Date(e); while (cur <= last) { dates.push(cur.toISOString().split("T")[0]); cur.setDate(cur.getDate() + 1); } return dates; };
+const useWindowWidth = () => { const [w, setW] = useState(window.innerWidth); useEffect(() => { const h = () => setW(window.innerWidth); window.addEventListener("resize", h); return () => window.removeEventListener("resize", h); }, []); return w; };
 
 const fmtDuration = (ms) => {
   if (!ms || ms <= 0) return "-";
@@ -481,8 +482,93 @@ function NoteDisplay({ text }) {
   );
 }
 
+// ─── Detail Drawer ───
+function DetailDrawer({ task, columns, onClose, onUpdate, engineers }) {
+  const catLabel = { preSales: "售前咨询", midSales: "售中任务", keyProject: "Key Project", tickets: "Ticket", warranty: "质保维修", paidRepair: "付费维修" };
+  const noteLines = (task.note || "").split("\n").filter(l => l.trim());
+  return (
+    <>
+      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 800 }} onClick={onClose} />
+      <div style={{ position: "fixed", top: 0, right: 0, bottom: 0, width: 420, maxWidth: "95vw", background: "#18181b", borderLeft: "1px solid #27272a", zIndex: 801, overflowY: "auto", padding: 24, boxShadow: "-8px 0 32px rgba(0,0,0,0.5)", display: "flex", flexDirection: "column", gap: 0 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18 }}>
+          <div>
+            <span style={{ fontSize: 10, color: "#60a5fa", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>{catLabel[task.category] || task.category}</span>
+            <h2 style={{ margin: "4px 0 0", fontSize: 20, color: "#fff", fontWeight: 700 }}>{task.customer || "未命名"}</h2>
+          </div>
+          <button style={{ background: "none", border: "1px solid #3f3f46", borderRadius: 6, color: "#a1a1aa", cursor: "pointer", padding: "4px 12px", fontSize: 16, lineHeight: 1 }} onClick={onClose}>✕</button>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
+          <span style={S.tag(task.status)}>{task.status === "已解决" ? "已解决" : task.status === "pending" ? "Pending" : "Ongoing"}</span>
+          {task.date && <span style={{ fontSize: 12, color: "#71717a" }}>{task.date}</span>}
+          {task.pinned && <span style={{ fontSize: 11, color: "#fbbf24" }}>📌 置顶</span>}
+          {task._hasKeyProject && <span style={{ fontSize: 10, color: "#34d399", background: "#10b98114", border: "1px solid #34d39930", padding: "2px 6px", borderRadius: 4, fontWeight: 700 }}>🔗 KP</span>}
+        </div>
+        {columns.filter(c => !["status", "timer", "note", "owners"].includes(c.key)).map(c => (
+          task[c.key] ? (
+            <div key={c.key} style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 10, color: "#52525b", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 5 }}>{c.label}</div>
+              {c.key === "quote"
+                ? <div style={{ fontSize: 16, color: "#fbbf24", fontWeight: 700 }}>{Math.round(Number(task[c.key])).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")} 元</div>
+                : <div style={{ fontSize: 14, color: "#e4e4e7", wordBreak: "break-word", lineHeight: 1.6 }}>{task[c.key]}</div>}
+            </div>
+          ) : null
+        ))}
+        {task.owners && task.owners.length > 0 && (
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 10, color: "#52525b", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>负责人</div>
+            <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+              {task.owners.map(n => <span key={n} style={{ background: "#2563eb18", color: "#60a5fa", padding: "3px 10px", borderRadius: 4, fontSize: 12, fontWeight: 600 }}>{n}</span>)}
+            </div>
+          </div>
+        )}
+        {task.category === "tickets" && (
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 10, color: "#52525b", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 5 }}>处理时长</div>
+            {task.status === "已解决" && task.resolved_at && task.created_at
+              ? <span style={{ color: "#4ade80", fontSize: 14 }}>{fmtDuration(new Date(task.resolved_at) - new Date(task.created_at))}</span>
+              : task.created_at ? <LiveTimer createdAt={task.created_at} /> : <span style={{ color: "#52525b" }}>-</span>}
+          </div>
+        )}
+        {noteLines.length > 0 && (
+          <div style={{ marginTop: 4 }}>
+            <div style={{ fontSize: 10, color: "#52525b", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>备注时间线</div>
+            <div style={{ background: "#27272a", borderRadius: 10, padding: "14px 16px", display: "flex", flexDirection: "column" }}>
+              {noteLines.map((line, i) => {
+                const m = line.match(/^(\d{1,2}\.\d{1,2})\s+(.*)$/);
+                return (
+                  <div key={i} style={{ display: "flex", gap: 12, paddingBottom: i < noteLines.length - 1 ? 12 : 0, marginBottom: i < noteLines.length - 1 ? 12 : 0, borderBottom: i < noteLines.length - 1 ? "1px solid #3f3f46" : "none" }}>
+                    {m ? (
+                      <>
+                        <span style={{ color: "#60a5fa", fontWeight: 700, fontSize: 13, minWidth: 40, flexShrink: 0 }}>{m[1]}</span>
+                        <span style={{ color: "#e4e4e7", fontSize: 13, lineHeight: 1.6 }}>{m[2]}</span>
+                      </>
+                    ) : (
+                      <span style={{ color: "#d4d4d8", fontSize: 13, lineHeight: 1.6 }}>{line}</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        {!task.note && <div style={{ color: "#3f3f46", fontSize: 13, fontStyle: "italic", marginTop: 8 }}>暂无备注</div>}
+        <div style={{ marginTop: "auto", paddingTop: 20, borderTop: "1px solid #27272a" }}>
+          <button style={{ background: "none", border: "1px solid #3f3f46", borderRadius: 6, color: "#a1a1aa", cursor: "pointer", padding: "6px 14px", fontSize: 12 }}
+            onClick={() => {
+              const lines = columns.map(c => `${c.label}: ${c.key === "owners" ? (task.owners || []).join(", ") : task[c.key] || "-"}`).join("\n");
+              navigator.clipboard?.writeText(lines);
+            }}>复制记录文本</button>
+        </div>
+      </div>
+    </>
+  );
+}
+
 // ─── Task Table ───
 function TaskTable({ cat, columns, data, onUpdate, onDelete, onAdd, engineers, onMigrate, onPin, hideResolved, sortState, onSort }) {
+  const w = useWindowWidth();
+  const isMobile = w < 720;
+  const [drawerRow, setDrawerRow] = useState(null);
   const [editId, setEditId] = useState(null);
   const [editData, setEditData] = useState({});
   const [deleteItem, setDeleteItem] = useState(null);
@@ -542,6 +628,26 @@ function TaskTable({ cat, columns, data, onUpdate, onDelete, onAdd, engineers, o
           <span style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", color: "#71717a" }}>{I.search}</span>
         </div>
       </div>
+      {isMobile ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {sorted.length === 0 && <div style={{ textAlign: "center", color: "#52525b", padding: 28 }}>暂无记录</div>}
+          {sorted.map(row => (
+            <div key={row.id} onClick={() => setDrawerRow(row)}
+              style={{ background: row.pinned ? "#1e3a5f22" : "#18181b", border: `1px solid ${row.pinned ? "#2563eb44" : "#27272a"}`, borderLeft: `3px solid ${row.pinned ? "#2563eb" : "transparent"}`, borderRadius: 8, padding: "12px 14px", cursor: "pointer" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6, gap: 8 }}>
+                <span style={{ fontWeight: 700, fontSize: 14, color: "#fff", flex: 1 }}>{row.customer || "-"}</span>
+                <span style={S.tag(row.status)}>{row.status === "已解决" ? "已解决" : row.status === "pending" ? "Pending" : "Ongoing"}</span>
+              </div>
+              <div style={{ fontSize: 12, color: "#a1a1aa", marginBottom: 6, lineHeight: 1.5 }}>{(row.problem || row.content || row.project_desc || "").slice(0, 100) || "-"}</div>
+              {row.note && <div style={{ fontSize: 11, color: "#60a5fa", marginBottom: 5 }}>{row.note.split("\n")[0].slice(0, 60)}</div>}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: 11, color: "#52525b" }}>{row.date}</span>
+                <span style={{ fontSize: 11, color: "#71717a" }}>{(row.owners || []).join(", ")}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
       <div style={{ overflowX: "auto", borderRadius: 8, border: "1px solid #27272a" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 750 }}>
           <thead><tr>
@@ -555,7 +661,7 @@ function TaskTable({ cat, columns, data, onUpdate, onDelete, onAdd, engineers, o
           <tbody>
             {sorted.length === 0 && <tr><td colSpan={columns.length + 1} style={{ ...S.td, textAlign: "center", color: "#52525b", padding: 28 }}>暂无记录</td></tr>}
             {sorted.map(row => (
-              <tr key={row.id} style={{ background: row.pinned ? "#2563eb08" : row.status === "已解决" ? "#16a34a06" : "transparent", borderLeft: row.pinned ? "3px solid #2563eb" : "3px solid transparent" }}>
+              <tr key={row.id} onClick={e => { if (editId !== row.id && !e.target.closest("button,input,select,a,label")) setDrawerRow(row); }} style={{ background: row.pinned ? "#2563eb08" : row.status === "已解决" ? "#16a34a06" : "transparent", borderLeft: row.pinned ? "3px solid #2563eb" : "3px solid transparent", cursor: editId === row.id ? "default" : "pointer" }}>
                 {columns.map(c => (
                   <td key={c.key} style={S.td}>
                     {editId === row.id ? (
@@ -632,6 +738,8 @@ function TaskTable({ cat, columns, data, onUpdate, onDelete, onAdd, engineers, o
           </tbody>
         </table>
       </div>
+      )}
+      {drawerRow && <DetailDrawer task={drawerRow} columns={columns} onClose={() => setDrawerRow(null)} onUpdate={onUpdate} engineers={engineers} />}
       {deleteItem && <DeleteConfirm item={deleteItem} onConfirm={onDelete} onClose={() => setDeleteItem(null)} />}
     </div>
   );
@@ -874,6 +982,9 @@ export default function App() {
   const saveTheme = (t) => { setTheme(t); localStorage.setItem("ae_theme", JSON.stringify(t)); };
   const [toast, setToast] = useState(null);
   const showToast = useCallback((message, type = "success") => { setToast({ message, type, key: Date.now() }); }, []);
+  const winW = useWindowWidth();
+  const isMobile = winW < 768;
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // ─── Fetch all data from Supabase ───
   const fetchAll = useCallback(async () => {
@@ -1154,50 +1265,100 @@ export default function App() {
             </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-            {/* Monthly trend */}
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "3fr 2fr", gap: 16, marginBottom: 16 }}>
+            {/* SVG Line Chart — monthly trend */}
             <div style={S.card}>
-              <h3 style={{ margin: "0 0 16px 0", fontSize: 15, color: "#fff" }}>月度趋势（近6个月）</h3>
-              <div style={{ display: "flex", alignItems: "flex-end", gap: 8, height: 160 }}>
-                {monthlyData.map(m => (
-                  <div key={m.key} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-                    <div style={{ display: "flex", gap: 3, alignItems: "flex-end", height: 130, width: "100%" }}>
-                      <div style={{ flex: 1, background: "#2563eb", borderRadius: "4px 4px 0 0", height: `${(m.created / maxMonthly) * 100}%`, minHeight: m.created > 0 ? 8 : 0, display: "flex", alignItems: "flex-start", justifyContent: "center" }}>
-                        {m.created > 0 && <span style={{ fontSize: 9, color: "#fff", fontWeight: 700, marginTop: 2 }}>{m.created}</span>}
-                      </div>
-                      <div style={{ flex: 1, background: "#16a34a", borderRadius: "4px 4px 0 0", height: `${(m.resolved / maxMonthly) * 100}%`, minHeight: m.resolved > 0 ? 8 : 0, display: "flex", alignItems: "flex-start", justifyContent: "center" }}>
-                        {m.resolved > 0 && <span style={{ fontSize: 9, color: "#fff", fontWeight: 700, marginTop: 2 }}>{m.resolved}</span>}
-                      </div>
-                    </div>
-                    <span style={{ fontSize: 10, color: "#71717a" }}>{m.label}</span>
-                  </div>
+              <h3 style={{ margin: "0 0 14px 0", fontSize: 15, color: "#fff" }}>月度新增趋势（近6个月）</h3>
+              <svg width="100%" viewBox="0 0 380 148" style={{ overflow: "visible", display: "block" }}>
+                {[0, 0.5, 1].map(f => (
+                  <line key={f} x1="30" y1={8 + (1 - f) * 108} x2="372" y2={8 + (1 - f) * 108} stroke="#27272a" strokeWidth="1" strokeDasharray={f > 0 ? "4 3" : "0"} />
                 ))}
-              </div>
-              <div style={{ display: "flex", gap: 16, marginTop: 10, fontSize: 11 }}>
-                <span style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: "#2563eb", display: "inline-block" }} /> 新增</span>
-                <span style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: "#16a34a", display: "inline-block" }} /> 已解决</span>
+                <polyline points={monthlyData.map((m, i) => `${30 + i * (342 / Math.max(monthlyData.length - 1, 1))},${8 + (1 - m.created / maxMonthly) * 108}`).join(" ")} fill="none" stroke="#3b82f6" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+                <polyline points={monthlyData.map((m, i) => `${30 + i * (342 / Math.max(monthlyData.length - 1, 1))},${8 + (1 - m.resolved / maxMonthly) * 108}`).join(" ")} fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+                {monthlyData.map((m, i) => {
+                  const x = 30 + i * (342 / Math.max(monthlyData.length - 1, 1));
+                  const yC = 8 + (1 - m.created / maxMonthly) * 108;
+                  const yR = 8 + (1 - m.resolved / maxMonthly) * 108;
+                  return (
+                    <g key={m.key}>
+                      <circle cx={x} cy={yC} r="4" fill="#3b82f6" stroke="#18181b" strokeWidth="2" />
+                      <circle cx={x} cy={yR} r="4" fill="#22c55e" stroke="#18181b" strokeWidth="2" />
+                      {m.created > 0 && <text x={x} y={yC - 9} textAnchor="middle" fontSize="9" fill="#93c5fd" fontWeight="600">{m.created}</text>}
+                      {m.resolved > 0 && <text x={x} y={yR - 9} textAnchor="middle" fontSize="9" fill="#86efac" fontWeight="600">{m.resolved}</text>}
+                      <text x={x} y={138} textAnchor="middle" fontSize="10" fill="#52525b">{m.label}</text>
+                    </g>
+                  );
+                })}
+              </svg>
+              <div style={{ display: "flex", gap: 18, marginTop: 6, fontSize: 11 }}>
+                <span style={{ display: "flex", alignItems: "center", gap: 5 }}><span style={{ width: 18, height: 3, background: "#3b82f6", display: "inline-block", borderRadius: 2 }} /> 新增</span>
+                <span style={{ display: "flex", alignItems: "center", gap: 5 }}><span style={{ width: 18, height: 3, background: "#22c55e", display: "inline-block", borderRadius: 2 }} /> 已解决</span>
               </div>
             </div>
 
-            {/* Engineer workload */}
+            {/* Donut pie chart — category breakdown */}
             <div style={S.card}>
-              <h3 style={{ margin: "0 0 16px 0", fontSize: 15, color: "#fff" }}>工程师工作量</h3>
-              <div style={{ display: "grid", gap: 8 }}>
-                {engLoad.map(e => (
-                  <div key={e.name}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
-                      <span style={{ fontSize: 12, color: "#e4e4e7", fontWeight: 600 }}>{e.name}</span>
-                      <span style={{ fontSize: 11, color: "#71717a" }}>{e.total} 条 (进行中 {e.ongoing + e.pending})</span>
-                    </div>
-                    <div style={{ display: "flex", height: 16, borderRadius: 4, overflow: "hidden", background: "#27272a" }}>
-                      {e.resolved > 0 && <div style={{ width: `${(e.resolved / maxEng) * 100}%`, background: "#16a34a" }} />}
-                      {e.pending > 0 && <div style={{ width: `${(e.pending / maxEng) * 100}%`, background: "#f97316" }} />}
-                      {e.ongoing > 0 && <div style={{ width: `${(e.ongoing / maxEng) * 100}%`, background: "#2563eb" }} />}
+              <h3 style={{ margin: "0 0 14px 0", fontSize: 15, color: "#fff" }}>各类别占比</h3>
+              {(() => {
+                const pd = catDefs.map(c => ({ ...c, val: getFiltered(c.key).length })).filter(c => c.val > 0);
+                const tot = pd.reduce((s, c) => s + c.val, 0) || 1;
+                let ang = -Math.PI / 2;
+                const slices = pd.map(c => {
+                  const da = (c.val / tot) * 2 * Math.PI;
+                  const s = ang; ang += da;
+                  const cx = 70, cy = 70, r = 62, ri = 38;
+                  const pt = (a, radius) => [cx + radius * Math.cos(a), cy + radius * Math.sin(a)];
+                  const [x1, y1] = pt(s, r), [x2, y2] = pt(ang, r);
+                  const [ix1, iy1] = pt(ang, ri), [ix2, iy2] = pt(s, ri);
+                  return { ...c, d: `M${x1} ${y1} A${r} ${r} 0 ${da > Math.PI ? 1 : 0} 1 ${x2} ${y2} L${ix1} ${iy1} A${ri} ${ri} 0 ${da > Math.PI ? 1 : 0} 0 ${ix2} ${iy2}Z` };
+                });
+                return (
+                  <div style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
+                    <svg width="140" height="140" viewBox="0 0 140 140" style={{ flexShrink: 0 }}>
+                      {slices.map(sl => <path key={sl.key} d={sl.d} fill={sl.clr} opacity="0.88" />)}
+                      <circle cx="70" cy="70" r="37" fill="#18181b" />
+                      <text x="70" y="66" textAnchor="middle" fontSize="18" fill="#fff" fontWeight="700">{tot}</text>
+                      <text x="70" y="80" textAnchor="middle" fontSize="9" fill="#71717a">总记录</text>
+                    </svg>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 7, fontSize: 11, flex: 1 }}>
+                      {pd.map(c => (
+                        <div key={c.key} style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                          <span style={{ width: 9, height: 9, borderRadius: 2, background: c.clr, flexShrink: 0, display: "inline-block" }} />
+                          <span style={{ color: "#d4d4d8", flex: 1 }}>{c.label}</span>
+                          <span style={{ color: c.clr, fontWeight: 700 }}>{c.val}</span>
+                          <span style={{ color: "#52525b", minWidth: 28, textAlign: "right" }}>{Math.round(c.val / tot * 100)}%</span>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                ))}
-                {engLoad.length === 0 && <div style={{ color: "#52525b", textAlign: "center", padding: 20 }}>暂无数据</div>}
-              </div>
+                );
+              })()}
+            </div>
+          </div>
+
+          {/* Engineer workload */}
+          <div style={S.card}>
+            <h3 style={{ margin: "0 0 14px 0", fontSize: 15, color: "#fff" }}>工程师工作量</h3>
+            <div style={{ display: "grid", gap: 8 }}>
+              {engLoad.map(e => (
+                <div key={e.name}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                    <span style={{ fontSize: 12, color: "#e4e4e7", fontWeight: 600 }}>{e.name}</span>
+                    <span style={{ fontSize: 11, color: "#71717a" }}>{e.total} 条 (进行中 {e.ongoing + e.pending})</span>
+                  </div>
+                  <div style={{ display: "flex", height: 16, borderRadius: 4, overflow: "hidden", background: "#27272a" }}>
+                    {e.resolved > 0 && <div style={{ width: `${(e.resolved / maxEng) * 100}%`, background: "#16a34a" }} />}
+                    {e.pending > 0 && <div style={{ width: `${(e.pending / maxEng) * 100}%`, background: "#f97316" }} />}
+                    {e.ongoing > 0 && <div style={{ width: `${(e.ongoing / maxEng) * 100}%`, background: "#2563eb" }} />}
+                  </div>
+                </div>
+              ))}
+              {engLoad.length === 0 && <div style={{ color: "#52525b", textAlign: "center", padding: 20 }}>暂无数据</div>}
+            </div>
+            <div style={{ display: "flex", gap: 16, marginTop: 12, fontSize: 11 }}>
+              <span style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: "#16a34a", display: "inline-block" }} /> 已解决</span>
+              <span style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: "#f97316", display: "inline-block" }} /> Pending</span>
+              <span style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: "#2563eb", display: "inline-block" }} /> Ongoing</span>
             </div>
           </div>
         </div>
@@ -1287,7 +1448,8 @@ export default function App() {
     <div style={{ ...S.app, background: tc.bg, color: tc.text, fontSize: fs }}>
       <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet" />
       <div style={{ display: "flex", minHeight: "100vh" }}>
-        <div style={{ width: 230, background: tc.sidebar, borderRight: `1px solid ${tc.border}`, padding: "16px 10px", display: "flex", flexDirection: "column", flexShrink: 0 }}>
+        {isMobile && sidebarOpen && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 699 }} onClick={() => setSidebarOpen(false)} />}
+        <div onClick={() => isMobile && setSidebarOpen(false)} style={{ width: 230, background: tc.sidebar, borderRight: `1px solid ${tc.border}`, padding: "16px 10px", display: "flex", flexDirection: "column", flexShrink: 0, ...(isMobile ? { position: "fixed", top: 0, bottom: 0, left: 0, zIndex: 700, transform: sidebarOpen ? "translateX(0)" : "translateX(-100%)", transition: "transform 0.25s ease", overflowY: "auto" } : {}) }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: "#fff", padding: "0 14px", marginBottom: 3 }}>⚙️ AE 任务平台</div>
           <div style={{ fontSize: 10, color: "#52525b", padding: "0 14px", marginBottom: 18 }}>
             {currentUser && currentUser !== "__admin__" ? `当前: ${currentUser}` : "Application Engineer"}{isAdmin && " ⭐管理员"}
@@ -1315,7 +1477,8 @@ export default function App() {
           </div>
         </div>
 
-        <div style={{ flex: 1, padding: "20px 28px", overflowY: "auto" }}>
+        <div style={{ flex: 1, padding: isMobile ? "14px 16px" : "20px 28px", overflowY: "auto", minWidth: 0 }}>
+          {isMobile && <button style={{ ...S.btn, ...S.btnGhost, ...S.btnSm, marginBottom: 14 }} onClick={e => { e.stopPropagation(); setSidebarOpen(true); }}>☰ 菜单</button>}
           {loading ? <div style={{ textAlign: "center", padding: 60, color: "#71717a" }}>加载中...</div> : <>
           <div style={{ marginBottom: 20 }}>
             <h1 style={{ fontSize: 20, fontWeight: 700, color: "#fff", margin: 0 }}>{viewLabel}</h1>
