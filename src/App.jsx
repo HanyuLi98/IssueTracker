@@ -604,7 +604,7 @@ function TaskTable({ cat, columns, data, onUpdate, onDelete, onAdd, engineers, o
                           <div style={{ display: "flex", alignItems: "flex-start", gap: 4, cursor: editableFields.includes(c.key) ? "text" : "default", minHeight: 20, padding: "1px 2px", borderRadius: 4, transition: "background 0.1s" }}
                             onDoubleClick={() => { if (editableFields.includes(c.key)) { setInlineEdit({ rowId: row.id, key: c.key }); setInlineValue(c.key === "note" ? "" : (row[c.key] || "")); } }}
                             title={c.key === "note" ? "双击添加备注更新" : editableFields.includes(c.key) ? "双击编辑" : ""}>
-                            {c.key === "note" ? <NoteDisplay text={row[c.key]} /> : c.key === "quote" && row[c.key] ? <span style={{ color: "#fbbf24", fontWeight: 600 }}>¥{Math.round(Number(row[c.key])).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")}</span> : <span style={{ color: c.key === "date" ? "#a1a1aa" : "#e4e4e7" }}>{row[c.key] || "-"}</span>}
+                            {c.key === "note" ? <NoteDisplay text={row[c.key]} /> : c.key === "quote" && row[c.key] ? <span style={{ color: "#fbbf24", fontWeight: 600 }}>{Math.round(Number(row[c.key])).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")} 元</span> : <span style={{ color: c.key === "date" ? "#a1a1aa" : "#e4e4e7" }}>{row[c.key] || "-"}</span>}
                             {(c.key === "problem" || c.key === "content") && row[c.key] && <TranslateBtn text={row[c.key]} />}
                           </div>
                         )
@@ -1207,7 +1207,7 @@ export default function App() {
       const sub = { tickets: "Ticket", warranty: "质保内维修", paidRepair: "付费维修及易损件" };
       const QMONTHS = { 1: [1,2,3], 2: [4,5,6], 3: [7,8,9], 4: [10,11,12] };
       const parseQ = (q) => { const n = parseFloat((q || "").replace(/[^0-9.]/g, "")); return isNaN(n) ? 0 : n; };
-      const fmtMoney = (n) => n > 0 ? `¥${Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")}` : "¥0";
+      const fmtMoney = (n) => n > 0 ? `${Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")} 元` : "0 元";
 
       const paidRaw = getFiltered("paidRepair");
       const paidByQ = quarterFilter.length > 0
@@ -1240,7 +1240,7 @@ export default function App() {
                 ].map(s => (
                   <div key={s.label} style={{ ...S.card, padding: "10px 18px", flex: "none" }}>
                     <div style={{ fontSize: 10, color: "#71717a", fontWeight: 600, marginBottom: 2 }}>{s.label}</div>
-                    <div style={{ fontSize: 20, fontWeight: 700, color: s.clr, fontFamily: "monospace" }}>{fmtMoney(s.val)}</div>
+                    <div style={{ fontSize: 20, fontWeight: 700, color: s.clr }}>{fmtMoney(s.val)}</div>
                   </div>
                 ))}
               </div>
