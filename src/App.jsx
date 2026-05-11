@@ -535,16 +535,26 @@ function DetailDrawer({ task, columns, onClose, onUpdate, engineers }) {
             <div style={{ background: "#27272a", borderRadius: 10, padding: "14px 16px", display: "flex", flexDirection: "column" }}>
               {noteLines.map((line, i) => {
                 const m = line.match(/^(\d{1,2}\.\d{1,2})\s+(.*)$/);
+                const deleteLine = () => {
+                  const newNote = noteLines.filter((_, j) => j !== i).join("\n");
+                  onUpdate({ ...task, note: newNote });
+                };
                 return (
-                  <div key={i} style={{ display: "flex", gap: 12, paddingBottom: i < noteLines.length - 1 ? 12 : 0, marginBottom: i < noteLines.length - 1 ? 12 : 0, borderBottom: i < noteLines.length - 1 ? "1px solid #3f3f46" : "none" }}>
-                    {m ? (
-                      <>
-                        <span style={{ color: "#60a5fa", fontWeight: 700, fontSize: 13, minWidth: 40, flexShrink: 0 }}>{m[1]}</span>
-                        <span style={{ color: "#e4e4e7", fontSize: 13, lineHeight: 1.6 }}>{m[2]}</span>
-                      </>
-                    ) : (
-                      <span style={{ color: "#d4d4d8", fontSize: 13, lineHeight: 1.6 }}>{line}</span>
-                    )}
+                  <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 8, paddingBottom: i < noteLines.length - 1 ? 12 : 0, marginBottom: i < noteLines.length - 1 ? 12 : 0, borderBottom: i < noteLines.length - 1 ? "1px solid #3f3f46" : "none" }}>
+                    <div style={{ flex: 1, display: "flex", gap: 12 }}>
+                      {m ? (
+                        <>
+                          <span style={{ color: "#60a5fa", fontWeight: 700, fontSize: 13, minWidth: 40, flexShrink: 0 }}>{m[1]}</span>
+                          <span style={{ color: "#e4e4e7", fontSize: 13, lineHeight: 1.6 }}>{m[2]}</span>
+                        </>
+                      ) : (
+                        <span style={{ color: "#d4d4d8", fontSize: 13, lineHeight: 1.6 }}>{line}</span>
+                      )}
+                    </div>
+                    <button onClick={deleteLine} title="删除此条备注"
+                      style={{ background: "none", border: "none", color: "#52525b", cursor: "pointer", fontSize: 16, padding: "0 2px", lineHeight: 1, flexShrink: 0, borderRadius: 4, transition: "color 0.1s" }}
+                      onMouseEnter={e => e.currentTarget.style.color = "#f87171"}
+                      onMouseLeave={e => e.currentTarget.style.color = "#52525b"}>×</button>
                   </div>
                 );
               })}
